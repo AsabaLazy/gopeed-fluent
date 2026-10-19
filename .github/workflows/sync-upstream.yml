@@ -1,0 +1,64 @@
+name: Sync Upstream & Build
+
+on:
+  schedule:
+    # 每天北京时间 02:00, 14:00 (UTC 18:00, 06:00) 自动检测上游更新
+    - cron: "0 6,18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check and sync upstream commits
+        id: sync_code
+        run: |
+          git remote add upstream https://github.com/Minessential/gopeed-fluent.git
+          git fetch upstream main --tags
+
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "Commits behind upstream: $BEHIND"
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "Merging upstream/main into main..."
+            git merge upstream/main -m "chore: sync upstream Minessential/gopeed-fluent"
+            git push origin main
+            echo "synced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Already up-to-date with upstream main."
+            echo "synced=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for new upstream release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          UPSTREAM_TAG=$(gh release view --repo Minessential/gopeed-fluent --json tagName -q .tagName 2>/dev/null || echo "")
+          if [ -z "$UPSTREAM_TAG" ]; then
+            echo "No upstream releases found."
+            exit 0
+          fi
+          echo "Latest upstream release tag: $UPSTREAM_TAG"
+
+          if gh release view "$UPSTREAM_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $UPSTREAM_TAG already exists in ${{ github.repository }}."
+            exit 0
+          fi
+
+          echo "New release detected! Triggering build workflow for $UPSTREAM_TAG..."
+          VERSION="${UPSTREAM_TAG#v}"
+          gh workflow run build.yml --repo "${{ github.repository }}" -f version="$VERSION" -f publish_release=true
