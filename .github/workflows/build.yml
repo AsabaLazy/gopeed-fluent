@@ -4,59 +4,68 @@ on:
   push:
     tags:
       - "v*"
-
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.2.3)"
-        required: true
+        description: "Release version (e.g. 1.9.3)"
+        required: false
+        default: "1.9.3"
         type: string
+      publish_release:
+        description: "Publish to GitHub Releases"
+        required: false
+        default: true
+        type: boolean
 
 env:
   GO_VERSION: "1.24"
-  FLUTTER_CHANNEL: "master"
-  FLUTTER_VERSION: "7e1c8868" # tag, commit or branch
+  FLUTTER_CHANNEL: "stable"
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  resolve-version:
     runs-on: ubuntu-latest
     outputs:
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      upload_url: ${{ steps.release.outputs.upload_url }}
-
+      version: ${{ steps.ver.outputs.version }}
+      tag_name: ${{ steps.ver.outputs.tag_name }}
     steps:
-      - name: Create or update release
-        id: release
-        if: github.event_name == 'push'
-        uses: release-drafter/release-drafter@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF#refs/tags/}"
+            V="${V#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v$V" >> "$GITHUB_OUTPUT"
 
   build-windows:
-    needs: [release]
+    needs: [resolve-version]
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: arm64
             os: windows-11-arm
-            llvm_ver: "20251202" # Only ARM64
+            llvm_ver: "20251202"
+            flutter_channel: "master"
+            flutter_version: "7e1c8868"
           - arch: x64
             os: windows-2022
             llvm_ver: ""
+            flutter_channel: "stable"
+            flutter_version: ""
 
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
-      - name: Enable long paths for flutter main branch checks
+      - name: Enable long paths
         run: |
           git config --global core.longpaths true
 
-      # Install LLVM environment only on ARM64
       - name: Install llvm-mingw-ucrt-aarch64 (ARM64 only)
         if: matrix.arch == 'arm64'
         run: |
@@ -65,14 +74,11 @@ jobs:
           $zip = "$env:RUNNER_TEMP\\llvm.zip"
           $extract = "$env:RUNNER_TEMP\\extract"
           $target = "C:\\clangarm64"
-
           curl -L $url -o $zip
           rm -r -fo $extract,$target -ea Ignore
           mkdir $extract | Out-Null
-
           tar -xf $zip -C $extract
           mv (Get-ChildItem $extract)[0].FullName $target
-
           $b = "$target\\bin"
           "CC=$b\\clang.exe"        >> $env:GITHUB_ENV
           "CXX=$b\\clang++.exe"     >> $env:GITHUB_ENV
@@ -81,37 +87,18 @@ jobs:
           "CLANGARM64_ROOT=$target" >> $env:GITHUB_ENV
           $b >> $env:GITHUB_PATH
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: ${{ env.FLUTTER_CHANNEL}}
-          flutter-version: ${{ env.FLUTTER_VERSION}}
+          channel: ${{ matrix.flutter_channel }}
+          flutter-version: ${{ matrix.flutter_version }}
 
-      - name: Resolve version
-        id: get_version
-        shell: pwsh
-        run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ inputs.version }}"
-          } else {
-            # Extract tag from github.ref (refs/tags/v1.2.3 -> v1.2.3)
-            $ref = "${{ github.ref }}"
-            if ($ref -match "^refs/tags/(.+)$") {
-              $raw = $matches[1]
-              $version = $raw -replace '^v', ''
-            } else {
-              Write-Error "No valid tag found in $ref"
-            }
-          }
-          if (-not $version) { Write-Error "VERSION is empty" }
-          echo "VERSION=$version" >> $env:GITHUB_ENV
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-
-      - name: Build
+      - name: Build Windows
         env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
           GOARCH: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}
         run: |
           Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/raw/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "ChineseSimplified.isl"
@@ -128,12 +115,10 @@ jobs:
           $system = "C:\Windows\System32"
 
           if ("${{ matrix.arch }}" -eq "arm64") {
-              # for ARM64
               $mingw = "$env:CLANGARM64_ROOT\aarch64-w64-mingw32\bin"
               cp $mingw\libc++.dll $release
               cp $mingw\libunwind.dll $release
           } else {
-              # for x64
               $mingw = "C:\Program Files\Git\mingw64\bin"
               cp $mingw\libstdc++-6.dll $release
               cp $mingw\libgcc_s_seh-1.dll $release
@@ -144,14 +129,15 @@ jobs:
           cp $system\vcruntime140.dll $release
           cp $system\vcruntime140_1.dll $release
 
+          mkdir Output -ea 0
+          Compress-Archive -Path "$release\*" -DestinationPath "Output\Gopeed_Fluent_${env:VERSION}_windows_${{ matrix.arch }}_portable.zip"
+
           cd build/windows
           echo @"
-          ; Script generated by the Inno Setup Script Wizard.
-          ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
           #define MyAppName "Gopeed(Fluent)"
           #define MyAppVersion "$env:VERSION"
           #define MyAppPublisher "Minessential"
-          #define MyAppURL "https://github.com/Minessential/gopeed-fluent"
+          #define MyAppURL "https://github.com/AsabaLazy/gopeed-fluent"
           #define MyAppExeName "gopeed.exe"
           #define Architectures "${{ matrix.arch }}"
           #define AppUserModelID "Mine.Gopeed.Fluent"
@@ -160,29 +146,18 @@ jobs:
           english.DeleteUserData=Would you like to delete all user data and settings?%n(Located in %APPDATA%\Gopeed(Fluent) folder)
           chinesesimplified.DeleteUserData=是否同时删除所有用户数据和设置？%n(位于 %APPDATA%\Gopeed(Fluent) 文件夹)
           [Setup]
-          ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
-          ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
           AppId={{0197064E-A982-7D4A-8AAA-B3F15AF86E60}
           AppName={#MyAppName}
           AppVersion={#MyAppVersion}
-          ;AppVerName={#MyAppName} {#MyAppVersion}
           AppPublisher={#MyAppPublisher}
           AppPublisherURL={#MyAppURL}
           AppSupportURL={#MyAppURL}
           AppUpdatesURL={#MyAppURL}
           DefaultDirName={autopf}\{#MyAppName}
-          ; "ArchitecturesAllowed=x64compatible" specifies that Setup cannot run
-          ; on anything but x64 and Windows 11 on Arm.
           ArchitecturesAllowed=x64compatible
-          ; "ArchitecturesInstallIn64BitMode=x64compatible" requests that the
-          ; install be done in "64-bit mode" on x64 or Windows 11 on Arm,
-          ; meaning it should use the native 64-bit Program Files directory and
-          ; the 64-bit view of the registry.
           ArchitecturesInstallIn64BitMode=x64compatible
           DisableProgramGroupPage=yes
           LicenseFile=..\..\..\..\LICENSE
-          ; Uncomment the following line to run in non administrative install mode (install for current user only).
-          ;PrivilegesRequired=lowest
           OutputDir=Output
           OutputBaseFilename=gopeed
           UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -198,10 +173,7 @@ jobs:
           [Tasks]
           Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
           [Files]
-          ;Source: ".\{#Architectures}\runner\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-          ;Source: ".\{#Architectures}\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
           Source: "${{ matrix.arch }}\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs;
-          ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
           [UninstallDelete]
           Type: filesandordirs; Name: "{app}"
           [Code]
@@ -214,36 +186,21 @@ jobs:
             begin
               if MsgBox(CustomMessage('DeleteUserData'), mbConfirmation, MB_YESNO) = IDYES then
               begin
-                // Close related processes
                 Exec('taskkill', '/F /IM gopeed.exe', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
                 Exec('taskkill', '/F /IM host.exe', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-                // Delete the data folder
                 AppDataPath := ExpandConstant('{userappdata}\Gopeed(Fluent)');
-                if DirExists(AppDataPath) then
-                begin
-                  DelTree(AppDataPath, True, True, True);
-                end;
-                
-                // Delete data in LocalAppData
+                if DirExists(AppDataPath) then DelTree(AppDataPath, True, True, True);
                 AppDataPath := ExpandConstant('{localappdata}\Gopeed(Fluent)');
-                if DirExists(AppDataPath) then
-                begin
-                  DelTree(AppDataPath, True, True, True);
-                end;
-                
-                // Delete related registry keys
+                if DirExists(AppDataPath) then DelTree(AppDataPath, True, True, True);
                 RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Google\Chrome\NativeMessagingHosts\com.gopeed.gopeed');
                 RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Mozilla\NativeMessagingHosts\com.gopeed.gopeed');
-                // Delete torrent protocol and file association registry keys
                 RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\magnet');
                 RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\.torrent');
                 RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\Gopeed_torrent');
               end;
             end;
-            
             if CurUninstallStep = usDone then
             begin
-              // Try to delete the installation directory after uninstallation (if there are any leftovers)
               DelTree(ExpandConstant('{app}'), True, True, True);
             end;
           end;
@@ -256,21 +213,145 @@ jobs:
           iscc.exe setup.iss
 
           $dest = "Output\Gopeed_Fluent_$($env:VERSION)_windows_${{ matrix.arch }}.exe"
-          Write-Host "Renaming output to: $dest"
           mv "Output\gopeed.exe" $dest
 
-      - name: Upload
-        if: github.event_name == 'push'
-        uses: shogo82148/actions-upload-release-asset@v1
-        with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: ui/flutter/build/windows/Output/*
-          overwrite: true
-
-      - name: Upload build artifact (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Gopeed_Fluent_${{ steps.get_version.outputs.version }}_windows_${{ matrix.arch }}_TEST
-          path: ui/flutter/build/windows/Output/*.exe
-          retention-days: 7
+          name: windows-${{ matrix.arch }}
+          path: |
+            ui/flutter/build/windows/Output/*.exe
+            ui/flutter/Output/*.zip
+
+  build-linux:
+    needs: [resolve-version]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libkeybinder-3.0-dev libfuse2 liblzma-dev
+
+      - name: Build Linux binaries
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          mkdir -p ui/flutter/linux/bundle/lib ui/flutter/assets/exec
+          go build -tags nosqlite -ldflags="-w -s -X github.com/GopeedLab/gopeed/pkg/base.Version=$VERSION" -buildmode=c-shared -o ui/flutter/linux/bundle/lib/libgopeed.so github.com/GopeedLab/gopeed/bind/desktop
+          go build -ldflags="-w -s" -o ui/flutter/assets/exec/host github.com/GopeedLab/gopeed/cmd/host
+          go build -ldflags="-w -s" -o ui/flutter/assets/exec/updater github.com/GopeedLab/gopeed/cmd/updater
+
+          cd ui/flutter
+          flutter build linux --release
+
+          mkdir -p dist
+
+          # 1. Package .tar.gz
+          tar -czvf "dist/Gopeed_Fluent_${VERSION}_linux_amd64.tar.gz" -C build/linux/x64/release/bundle .
+
+          # 2. Package .deb
+          PKG_DIR="deb_pkg"
+          rm -rf "$PKG_DIR"
+          mkdir -p "$PKG_DIR/opt/gopeed" "$PKG_DIR/usr/bin" "$PKG_DIR/usr/share/applications" "$PKG_DIR/usr/share/icons/hicolor/scalable/apps" "$PKG_DIR/DEBIAN"
+          cp -r build/linux/x64/release/bundle/* "$PKG_DIR/opt/gopeed/"
+          ln -sf /opt/gopeed/gopeed "$PKG_DIR/usr/bin/gopeed-fluent"
+          ln -sf /opt/gopeed/gopeed "$PKG_DIR/usr/bin/gopeed"
+          cp assets/icon/icon.svg "$PKG_DIR/usr/share/icons/hicolor/scalable/apps/gopeed-fluent.svg"
+          cp assets/icon/icon.svg "$PKG_DIR/usr/share/icons/hicolor/scalable/apps/gopeed.svg"
+
+          cat << EOF > "$PKG_DIR/usr/share/applications/gopeed-fluent.desktop"
+[Desktop Entry]
+Name=Gopeed Fluent
+Comment=High speed downloader with Fluent UI
+Exec=/opt/gopeed/gopeed %U
+Icon=gopeed-fluent
+Terminal=false
+Type=Application
+Categories=Network;Utility;
+MimeType=x-scheme-handler/gopeed;x-scheme-handler/magnet;application/x-bittorrent;
+EOF
+
+          cat << EOF > "$PKG_DIR/DEBIAN/control"
+Package: gopeed-fluent
+Version: $VERSION
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, libkeybinder-3.0-0
+Maintainer: AsabaLazy <https://github.com/AsabaLazy/gopeed-fluent>
+Description: High speed downloader with Fluent UI
+EOF
+
+          dpkg-deb --build --root-owner-group "$PKG_DIR" "dist/Gopeed_Fluent_${VERSION}_linux_amd64.deb"
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: ui/flutter/dist/*
+
+  build-macos:
+    needs: [resolve-version]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: Build macOS app
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          mkdir -p ui/flutter/macos/Frameworks ui/flutter/assets/exec
+          go build -tags nosqlite -ldflags="-w -s -X github.com/GopeedLab/gopeed/pkg/base.Version=$VERSION" -buildmode=c-shared -o ui/flutter/macos/Frameworks/libgopeed.dylib github.com/GopeedLab/gopeed/bind/desktop
+          go build -ldflags="-w -s" -o ui/flutter/assets/exec/host github.com/GopeedLab/gopeed/cmd/host
+          go build -ldflags="-w -s" -o ui/flutter/assets/exec/updater github.com/GopeedLab/gopeed/cmd/updater
+
+          cd ui/flutter
+          flutter build macos --release
+
+          mkdir -p dist
+          cd build/macos/Build/Products/Release
+          zip -r -y "../../../../../dist/Gopeed_Fluent_${VERSION}_macos.zip" Gopeed.app
+          hdiutil create -volname "Gopeed Fluent" -srcfolder Gopeed.app -ov -format UDZO "../../../../../dist/Gopeed_Fluent_${VERSION}_macos.dmg"
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ui/flutter/dist/*
+
+  release:
+    needs: [resolve-version, build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -la release-assets/
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.tag_name }}
+          name: ${{ needs.resolve-version.outputs.tag_name }}
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
