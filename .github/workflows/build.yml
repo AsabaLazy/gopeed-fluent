@@ -266,28 +266,30 @@ jobs:
           cp assets/icon/icon.svg "$PKG_DIR/usr/share/icons/hicolor/scalable/apps/gopeed-fluent.svg"
           cp assets/icon/icon.svg "$PKG_DIR/usr/share/icons/hicolor/scalable/apps/gopeed.svg"
 
-          cat << EOF > "$PKG_DIR/usr/share/applications/gopeed-fluent.desktop"
-[Desktop Entry]
-Name=Gopeed Fluent
-Comment=High speed downloader with Fluent UI
-Exec=/opt/gopeed/gopeed %U
-Icon=gopeed-fluent
-Terminal=false
-Type=Application
-Categories=Network;Utility;
-MimeType=x-scheme-handler/gopeed;x-scheme-handler/magnet;application/x-bittorrent;
-EOF
+          cat << 'EOF' > "$PKG_DIR/usr/share/applications/gopeed-fluent.desktop"
+          [Desktop Entry]
+          Name=Gopeed Fluent
+          Comment=High speed downloader with Fluent UI
+          Exec=/opt/gopeed/gopeed %U
+          Icon=gopeed-fluent
+          Terminal=false
+          Type=Application
+          Categories=Network;Utility;
+          MimeType=x-scheme-handler/gopeed;x-scheme-handler/magnet;application/x-bittorrent;
+          EOF
+          sed -i 's/^[ \t]*//' "$PKG_DIR/usr/share/applications/gopeed-fluent.desktop"
 
           cat << EOF > "$PKG_DIR/DEBIAN/control"
-Package: gopeed-fluent
-Version: $VERSION
-Section: net
-Priority: optional
-Architecture: amd64
-Depends: libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, libkeybinder-3.0-0
-Maintainer: AsabaLazy <https://github.com/AsabaLazy/gopeed-fluent>
-Description: High speed downloader with Fluent UI
-EOF
+          Package: gopeed-fluent
+          Version: $VERSION
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Depends: libgtk-3-0, libwebkit2gtk-4.1-0, libayatana-appindicator3-1, libkeybinder-3.0-0
+          Maintainer: AsabaLazy <https://github.com/AsabaLazy/gopeed-fluent>
+          Description: High speed downloader with Fluent UI
+          EOF
+          sed -i 's/^[ \t]*//' "$PKG_DIR/DEBIAN/control"
 
           dpkg-deb --build --root-owner-group "$PKG_DIR" "dist/Gopeed_Fluent_${VERSION}_linux_amd64.deb"
 
