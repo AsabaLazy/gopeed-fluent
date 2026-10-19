@@ -44,48 +44,12 @@ jobs:
 
   build-windows:
     needs: [resolve-version]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: arm64
-            os: windows-11-arm
-            llvm_ver: "20251202"
-            flutter_channel: "master"
-            flutter_version: "7e1c8868"
-          - arch: x64
-            os: windows-2022
-            llvm_ver: ""
-            flutter_channel: "stable"
-            flutter_version: ""
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Enable long paths
         run: |
           git config --global core.longpaths true
-
-      - name: Install llvm-mingw-ucrt-aarch64 (ARM64 only)
-        if: matrix.arch == 'arm64'
-        run: |
-          $ver = "${{ matrix.llvm_ver }}"
-          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/$ver/llvm-mingw-$ver-ucrt-aarch64.zip"
-          $zip = "$env:RUNNER_TEMP\\llvm.zip"
-          $extract = "$env:RUNNER_TEMP\\extract"
-          $target = "C:\\clangarm64"
-          curl -L $url -o $zip
-          rm -r -fo $extract,$target -ea Ignore
-          mkdir $extract | Out-Null
-          tar -xf $zip -C $extract
-          mv (Get-ChildItem $extract)[0].FullName $target
-          $b = "$target\\bin"
-          "CC=$b\\clang.exe"        >> $env:GITHUB_ENV
-          "CXX=$b\\clang++.exe"     >> $env:GITHUB_ENV
-          "CLANGARM64_BIN=$b"       >> $env:GITHUB_ENV
-          "CGO_ENABLED=1"           >> $env:GITHUB_ENV
-          "CLANGARM64_ROOT=$target" >> $env:GITHUB_ENV
-          $b >> $env:GITHUB_PATH
 
       - uses: actions/setup-go@v5
         with:
@@ -93,15 +57,14 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: ${{ matrix.flutter_channel }}
-          flutter-version: ${{ matrix.flutter_version }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
 
-      - name: Build Windows
+      - name: Build Windows (x64)
         env:
           VERSION: ${{ needs.resolve-version.outputs.version }}
-          GOARCH: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}
+          GOARCH: amd64
         run: |
-          cp .github\workflows\scripts\ChineseSimplified.isl "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl" -Force
+          cp .github\workflows\scripts\ChineseSimplified.isl "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl" -Force -ea 0
 
           go build -tags nosqlite -ldflags="-w -s -X github.com/GopeedLab/gopeed/pkg/base.Version=$env:VERSION" -buildmode=c-shared -o ui/flutter/windows/libgopeed.dll github.com/GopeedLab/gopeed/bind/desktop
           go build -ldflags="-w -s" -o ui/flutter/assets/exec/host.exe github.com/GopeedLab/gopeed/cmd/host
@@ -110,42 +73,36 @@ jobs:
           cd ui/flutter
           flutter build windows --release
 
-          $release = "build\windows\${{ matrix.arch }}\runner\Release\"
+          $release = "build\windows\x64\runner\Release\"
           $system = "C:\Windows\System32"
 
-          if ("${{ matrix.arch }}" -eq "arm64") {
-              $mingw = "$env:CLANGARM64_ROOT\aarch64-w64-mingw32\bin"
-              Copy-Item "$mingw\libc++.dll" $release -Force -ea 0
-              Copy-Item "$mingw\libunwind.dll" $release -Force -ea 0
-          } else {
-              $searchPaths = @(
-                  "C:\msys64\mingw64\bin",
-                  "C:\msys64\ucrt64\bin",
-                  "C:\Program Files\Git\mingw64\bin",
-                  "C:\Strawberry\c\bin"
-              )
-              $mingw = ($searchPaths | Where-Object { Test-Path "$_\libwinpthread-1.dll" } | Select-Object -First 1)
-              if ($mingw) {
-                  Get-ChildItem -Path $mingw -Filter "*.dll" | Where-Object { $_.Name -match "lib(stdc\+\+|gcc|winpthread)" } | Copy-Item -Destination $release -Force -ea 0
-              }
+          $searchPaths = @(
+              "C:\msys64\mingw64\bin",
+              "C:\msys64\ucrt64\bin",
+              "C:\Program Files\Git\mingw64\bin",
+              "C:\Strawberry\c\bin"
+          )
+          $mingw = ($searchPaths | Where-Object { Test-Path "$_\libwinpthread-1.dll" } | Select-Object -First 1)
+          if ($mingw) {
+              Get-ChildItem -Path $mingw -Filter "*.dll" | Where-Object { $_.Name -match "lib(stdc\+\+|gcc|winpthread)" } | Copy-Item -Destination $release -Force -ea 0
           }
 
           Get-ChildItem -Path $system -Filter "*.dll" | Where-Object { $_.Name -match "^(msvcp140|vcruntime140)" } | Copy-Item -Destination $release -Force -ea 0
 
           mkdir build\windows\Output -ea 0
-          Compress-Archive -Path "$release\*" -DestinationPath "build\windows\Output\Gopeed_Fluent_${env:VERSION}_windows_${{ matrix.arch }}_portable.zip"
+          Compress-Archive -Path "$release\*" -DestinationPath "build\windows\Output\Gopeed_Fluent_${env:VERSION}_windows_x64_portable.zip"
 
           cp ..\..\.github\workflows\scripts\setup.iss build\windows\setup.iss
           cd build\windows
-          iscc.exe /DMyAppVersion="$env:VERSION" /DArchitectures="${{ matrix.arch }}" setup.iss
+          iscc.exe /DMyAppVersion="$env:VERSION" /DArchitectures="x64" setup.iss
 
-          $dest = "Output\Gopeed_Fluent_$($env:VERSION)_windows_${{ matrix.arch }}.exe"
+          $dest = "Output\Gopeed_Fluent_$($env:VERSION)_windows_x64.exe"
           mv "Output\gopeed.exe" $dest
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ matrix.arch }}
+          name: windows-x64
           path: ui/flutter/build/windows/Output/*
 
   build-linux:
