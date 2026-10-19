@@ -129,88 +129,12 @@ jobs:
           cp $system\vcruntime140.dll $release
           cp $system\vcruntime140_1.dll $release
 
-          mkdir Output -ea 0
-          Compress-Archive -Path "$release\*" -DestinationPath "Output\Gopeed_Fluent_${env:VERSION}_windows_${{ matrix.arch }}_portable.zip"
+          mkdir build\windows\Output -ea 0
+          Compress-Archive -Path "$release\*" -DestinationPath "build\windows\Output\Gopeed_Fluent_${env:VERSION}_windows_${{ matrix.arch }}_portable.zip"
 
-          cd build/windows
-          echo @"
-          #define MyAppName "Gopeed(Fluent)"
-          #define MyAppVersion "$env:VERSION"
-          #define MyAppPublisher "Minessential"
-          #define MyAppURL "https://github.com/AsabaLazy/gopeed-fluent"
-          #define MyAppExeName "gopeed.exe"
-          #define Architectures "${{ matrix.arch }}"
-          #define AppUserModelID "Mine.Gopeed.Fluent"
-          #define AppUserModelToastActivatorCLSID "0197064E-A982-7D4A-8AAA-B3F15AF86E60"
-          [CustomMessages]
-          english.DeleteUserData=Would you like to delete all user data and settings?%n(Located in %APPDATA%\Gopeed(Fluent) folder)
-          chinesesimplified.DeleteUserData=是否同时删除所有用户数据和设置？%n(位于 %APPDATA%\Gopeed(Fluent) 文件夹)
-          [Setup]
-          AppId={{0197064E-A982-7D4A-8AAA-B3F15AF86E60}
-          AppName={#MyAppName}
-          AppVersion={#MyAppVersion}
-          AppPublisher={#MyAppPublisher}
-          AppPublisherURL={#MyAppURL}
-          AppSupportURL={#MyAppURL}
-          AppUpdatesURL={#MyAppURL}
-          DefaultDirName={autopf}\{#MyAppName}
-          ArchitecturesAllowed=x64compatible
-          ArchitecturesInstallIn64BitMode=x64compatible
-          DisableProgramGroupPage=yes
-          LicenseFile=..\..\..\..\LICENSE
-          OutputDir=Output
-          OutputBaseFilename=gopeed
-          UninstallDisplayIcon={app}\{#MyAppExeName}
-          Compression=lzma
-          SolidCompression=yes
-          WizardStyle=modern
-          LanguageDetectionMethod=uilanguage
-          ShowLanguageDialog=yes
-          CloseApplications=force
-          [Languages]
-          Name: "english"; MessagesFile: "compiler:Default.isl"
-          Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
-          [Tasks]
-          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-          [Files]
-          Source: "${{ matrix.arch }}\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs;
-          [UninstallDelete]
-          Type: filesandordirs; Name: "{app}"
-          [Code]
-          procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-          var
-            AppDataPath: string;
-            ExitCode: Integer;
-          begin
-            if CurUninstallStep = usUninstall then
-            begin
-              if MsgBox(CustomMessage('DeleteUserData'), mbConfirmation, MB_YESNO) = IDYES then
-              begin
-                Exec('taskkill', '/F /IM gopeed.exe', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-                Exec('taskkill', '/F /IM host.exe', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
-                AppDataPath := ExpandConstant('{userappdata}\Gopeed(Fluent)');
-                if DirExists(AppDataPath) then DelTree(AppDataPath, True, True, True);
-                AppDataPath := ExpandConstant('{localappdata}\Gopeed(Fluent)');
-                if DirExists(AppDataPath) then DelTree(AppDataPath, True, True, True);
-                RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Google\Chrome\NativeMessagingHosts\com.gopeed.gopeed');
-                RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Mozilla\NativeMessagingHosts\com.gopeed.gopeed');
-                RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\magnet');
-                RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\.torrent');
-                RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\Gopeed_torrent');
-              end;
-            end;
-            if CurUninstallStep = usDone then
-            begin
-              DelTree(ExpandConstant('{app}'), True, True, True);
-            end;
-          end;
-          [Icons]
-          Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}";  AppUserModelID: "{#AppUserModelID}"; AppUserModelToastActivatorCLSID: "{#AppUserModelToastActivatorCLSID}"
-          Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; AppUserModelID: "{#AppUserModelID}"; AppUserModelToastActivatorCLSID: "{#AppUserModelToastActivatorCLSID}"
-          [Run]
-          Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-          "@ > setup.iss
-          iscc.exe setup.iss
+          cp ..\..\.github\workflows\scripts\setup.iss build\windows\setup.iss
+          cd build\windows
+          iscc.exe /DMyAppVersion="$env:VERSION" /DArchitectures="${{ matrix.arch }}" setup.iss
 
           $dest = "Output\Gopeed_Fluent_$($env:VERSION)_windows_${{ matrix.arch }}.exe"
           mv "Output\gopeed.exe" $dest
@@ -219,9 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.arch }}
-          path: |
-            ui/flutter/build/windows/Output/*.exe
-            ui/flutter/Output/*.zip
+          path: ui/flutter/build/windows/Output/*
 
   build-linux:
     needs: [resolve-version]
@@ -321,6 +243,7 @@ jobs:
           go build -ldflags="-w -s" -o ui/flutter/assets/exec/updater github.com/GopeedLab/gopeed/cmd/updater
 
           cd ui/flutter
+          flutter config --no-enable-swift-package-manager
           flutter build macos --release
 
           mkdir -p dist
