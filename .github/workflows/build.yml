@@ -115,18 +115,22 @@ jobs:
 
           if ("${{ matrix.arch }}" -eq "arm64") {
               $mingw = "$env:CLANGARM64_ROOT\aarch64-w64-mingw32\bin"
-              cp $mingw\libc++.dll $release
-              cp $mingw\libunwind.dll $release
+              Copy-Item "$mingw\libc++.dll" $release -Force -ea 0
+              Copy-Item "$mingw\libunwind.dll" $release -Force -ea 0
           } else {
-              $mingw = "C:\Program Files\Git\mingw64\bin"
-              cp $mingw\libstdc++-6.dll $release
-              cp $mingw\libgcc_s_seh-1.dll $release
+              $searchPaths = @(
+                  "C:\msys64\mingw64\bin",
+                  "C:\msys64\ucrt64\bin",
+                  "C:\Program Files\Git\mingw64\bin",
+                  "C:\Strawberry\c\bin"
+              )
+              $mingw = ($searchPaths | Where-Object { Test-Path "$_\libwinpthread-1.dll" } | Select-Object -First 1)
+              if ($mingw) {
+                  Get-ChildItem -Path $mingw -Filter "*.dll" | Where-Object { $_.Name -match "lib(stdc\+\+|gcc|winpthread)" } | Copy-Item -Destination $release -Force -ea 0
+              }
           }
 
-          cp $mingw\libwinpthread-1.dll $release
-          cp $system\msvcp140.dll $release
-          cp $system\vcruntime140.dll $release
-          cp $system\vcruntime140_1.dll $release
+          Get-ChildItem -Path $system -Filter "*.dll" | Where-Object { $_.Name -match "^(msvcp140|vcruntime140)" } | Copy-Item -Destination $release -Force -ea 0
 
           mkdir build\windows\Output -ea 0
           Compress-Archive -Path "$release\*" -DestinationPath "build\windows\Output\Gopeed_Fluent_${env:VERSION}_windows_${{ matrix.arch }}_portable.zip"
