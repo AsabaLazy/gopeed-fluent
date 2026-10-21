@@ -43,6 +43,7 @@ function(APPLY_STANDARD_SETTINGS TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
   target_compile_options(${TARGET} PRIVATE -Wall -Werror)
   target_compile_options(${TARGET} PRIVATE -Wno-error=deprecated-declarations) # Allow deprecated warnings
+  target_compile_options(${TARGET} PRIVATE -Wno-error=sometimes-uninitialized) # Clang 23 warns in hotkey_manager_linux
   target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
 endfunction()
