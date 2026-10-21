@@ -26,7 +26,7 @@ func Info(w http.ResponseWriter, r *http.Request) {
 func Resolve(w http.ResponseWriter, r *http.Request) {
 	var req model.ResolveTask
 	if ReadJson(r, w, &req) {
-		rr, err := Downloader.Resolve(req.Req, req.Opts)
+		rr, err := Downloader.Resolve(req.Req)
 		if err != nil {
 			WriteJson(w, model.NewErrorResult(err.Error()))
 			return
@@ -43,7 +43,7 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 			err    error
 		)
 		if req.Rid != "" {
-			taskId, err = Downloader.Create(req.Rid)
+			taskId, err = Downloader.CreateWithOptions(req.Rid, req.Opts)
 		} else if req.Req != nil {
 			taskId, err = Downloader.CreateDirect(req.Req, req.Opts)
 		} else {
@@ -82,7 +82,7 @@ func PatchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req model.ResolveTask
+	var req model.PatchTask
 	if ReadJson(r, w, &req) {
 		if err := Downloader.Patch(taskId, req.Req, req.Opts); err != nil {
 			if err == download.ErrTaskNotFound {
@@ -195,6 +195,25 @@ func GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJson(w, model.NewOkResult(task))
+}
+
+func GetTaskStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskId := vars["id"]
+	if taskId == "" {
+		WriteJson(w, model.NewErrorResult("param invalid: id", model.CodeInvalidParam))
+		return
+	}
+	status, err := Downloader.RuntimeStatus(taskId)
+	if err != nil {
+		if err == download.ErrTaskNotFound {
+			WriteJson(w, model.NewErrorResult("task not found", model.CodeTaskNotFound))
+			return
+		}
+		WriteJson(w, model.NewErrorResult(err.Error()))
+		return
+	}
+	WriteJson(w, model.NewOkResult(status))
 }
 
 func GetTasks(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +351,8 @@ func DoProxy(w http.ResponseWriter, r *http.Request) {
 	r.RequestURI = ""
 	r.URL = targetUrl
 	r.Host = targetUrl.Host
-	r.Header.Del("Authorization")
+	r.Header.Del("Cookie")
+	r.Header.Del("X-Api-Token")
 	r.Header.Del("X-Target-Uri")
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {

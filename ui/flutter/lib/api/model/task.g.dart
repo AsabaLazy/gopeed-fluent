@@ -16,6 +16,7 @@ Task _$TaskFromJson(Map<String, dynamic> json) => Task(
       progress: Progress.fromJson(json['progress'] as Map<String, dynamic>),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      doneAt: json['doneAt'] == null ? null : DateTime.parse(json['doneAt'] as String),
     );
 
 Map<String, dynamic> _$TaskToJson(Task instance) {
@@ -37,6 +38,7 @@ Map<String, dynamic> _$TaskToJson(Task instance) {
   val['progress'] = instance.progress.toJson();
   val['createdAt'] = instance.createdAt.toIso8601String();
   val['updatedAt'] = instance.updatedAt.toIso8601String();
+  writeNotNull('doneAt', instance.doneAt?.toIso8601String());
   return val;
 }
 
@@ -44,6 +46,7 @@ const _$ProtocolEnumMap = {
   Protocol.http: 'http',
   Protocol.bt: 'bt',
   Protocol.ed2k: 'ed2k',
+  Protocol.hls: 'hls',
 };
 
 const _$StatusEnumMap = {
@@ -79,6 +82,7 @@ Map<String, dynamic> _$ProgressToJson(Progress instance) => <String, dynamic>{
 
 const _$ExtractStatusEnumMap = {
   ExtractStatus.none: '',
+  ExtractStatus.queued: 'queued',
   ExtractStatus.extracting: 'extracting',
   ExtractStatus.done: 'done',
   ExtractStatus.error: 'error',

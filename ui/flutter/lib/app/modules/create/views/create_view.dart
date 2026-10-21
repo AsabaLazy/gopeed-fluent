@@ -770,6 +770,7 @@ class CreateView extends GetView<CreateController> {
     final protocol = parseProtocol(url);
     switch (protocol) {
       case Protocol.http:
+      case Protocol.hls:
         final header = Map<String, String>.fromEntries(
           _httpHeaderControllers.map((e) => MapEntry(e.name.text, e.value.text)),
         );

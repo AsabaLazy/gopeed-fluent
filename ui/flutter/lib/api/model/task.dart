@@ -7,12 +7,14 @@ part 'task.g.dart';
 
 enum Status { ready, running, pause, wait, error, done }
 
-enum Protocol { http, bt, ed2k }
+enum Protocol { http, bt, ed2k, hls }
 
 // ExtractStatus enum matching Go backend
 enum ExtractStatus {
   @JsonValue('')
   none,
+  @JsonValue('queued')
+  queued,
   @JsonValue('extracting')
   extracting,
   @JsonValue('done')
@@ -34,6 +36,7 @@ class Task extends Equatable {
   final Progress progress;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? doneAt;
 
   const Task({
     this.protocol,
@@ -45,6 +48,7 @@ class Task extends Equatable {
     required this.progress,
     required this.createdAt,
     required this.updatedAt,
+    this.doneAt,
   });
 
   @override

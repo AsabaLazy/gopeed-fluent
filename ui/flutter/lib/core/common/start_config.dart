@@ -6,6 +6,7 @@ part 'start_config.g.dart';
 class StartConfig {
   late String network;
   late String address;
+  bool apiEnable = true;
   late String storage;
   late String storageDir;
   late int refreshInterval;

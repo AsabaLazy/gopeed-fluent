@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.9.3)"
+        description: "Release version (e.g. 2.0.0-beta.3)"
         required: false
-        default: "1.9.3"
+        default: "2.0.0-beta.3"
         type: string
       publish_release:
         description: "Publish to GitHub Releases"
@@ -18,7 +18,7 @@ on:
         type: boolean
 
 env:
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25.4"
   FLUTTER_CHANNEL: "stable"
 
 permissions:

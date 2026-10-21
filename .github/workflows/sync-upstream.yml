@@ -28,26 +28,45 @@ jobs:
       - name: Check and sync upstream commits
         id: sync_code
         run: |
-          git remote add upstream https://github.com/Minessential/gopeed-fluent.git
+          git remote add upstream https://github.com/GopeedLab/gopeed.git
           git fetch upstream main --tags --force
 
           BEHIND=$(git rev-list --count HEAD..upstream/main)
           echo "Commits behind upstream: $BEHIND"
-          if [ "$BEHIND" -gt 0 ]; then
-            echo "Merging upstream/main into main..."
-            git merge upstream/main -m "chore: sync upstream Minessential/gopeed-fluent"
-            git push origin main
-            echo "synced=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$BEHIND" -eq 0 ]; then
             echo "Already up-to-date with upstream main."
             echo "synced=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          echo "Merging upstream/main into main while preserving the Fluent UI..."
+          git merge --no-commit --no-ff upstream/main || true
+          git rev-parse -q --verify MERGE_HEAD >/dev/null
+
+          # Upstream 2.x replaced the Flutter app. Keep this fork's UI and CI,
+          # and merge only the core/backend changes.
+          git rm -r -q --force ui
+          git checkout HEAD -- ui
+          git rm -r -q --force --ignore-unmatch ui/flutter_old
+          git rm -r -q --force .github/workflows
+          git checkout HEAD -- .github/workflows
+          git rm -q --force --ignore-unmatch .github/workflows/release.yml .github/workflows/test.yml
+
+          if [ -n "$(git diff --name-only --diff-filter=U)" ]; then
+            echo "Unresolved conflicts outside the preserved UI:"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          git commit --allow-empty -m "chore: sync upstream GopeedLab/gopeed"
+          git push origin main
+          echo "synced=true" >> "$GITHUB_OUTPUT"
 
       - name: Check for new upstream release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          UPSTREAM_TAG=$(gh release view --repo Minessential/gopeed-fluent --json tagName -q .tagName 2>/dev/null || echo "")
+          UPSTREAM_TAG=$(gh release view --repo GopeedLab/gopeed --json tagName -q .tagName 2>/dev/null || echo "")
           if [ -z "$UPSTREAM_TAG" ]; then
             echo "No upstream releases found."
             exit 0

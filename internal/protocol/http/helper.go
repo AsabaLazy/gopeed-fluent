@@ -12,10 +12,12 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/GopeedLab/gopeed/internal/httpclient"
 	"github.com/GopeedLab/gopeed/pkg/base"
 	fhttp "github.com/GopeedLab/gopeed/pkg/protocol/http"
 	"github.com/GopeedLab/gopeed/pkg/util"
@@ -24,6 +26,45 @@ import (
 
 type RequestError struct {
 	Code int
+}
+
+// extractIfRangeValidator returns only validators that are strong enough for
+// If-Range. Any entity-tag header blocks Last-Modified fallback: a weak or
+// malformed ETag does not make the date validator strong.
+func extractIfRangeValidator(header http.Header) string {
+	etag := strings.TrimSpace(header.Get(base.HttpHeaderETag))
+	if etag != "" {
+		if isStrongETag(etag) {
+			return etag
+		}
+		return ""
+	}
+
+	lastModified := strings.TrimSpace(header.Get(base.HttpHeaderLastModified))
+	date := strings.TrimSpace(header.Get("Date"))
+	if lastModified == "" || date == "" {
+		return ""
+	}
+	modifiedAt, modifiedErr := http.ParseTime(lastModified)
+	responseAt, responseErr := http.ParseTime(date)
+	if modifiedErr != nil || responseErr != nil || responseAt.Sub(modifiedAt) < time.Second {
+		return ""
+	}
+	return lastModified
+}
+
+func isStrongETag(value string) bool {
+	if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
+		return false
+	}
+	for i := 1; i < len(value)-1; i++ {
+		b := value[i]
+		if b == 0x21 || (b >= 0x23 && b <= 0x7e) || b >= 0x80 {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func NewRequestError(code int) *RequestError {
@@ -165,15 +206,17 @@ func isRedirectExpiredError(err error) bool {
 
 // tryFallbackToOriginalURL attempts to make a request using the original URL
 // when the redirect URL has expired. Returns the response if successful.
-func (f *Fetcher) tryFallbackToOriginalURL(ctx context.Context, client *http.Client, rangeStart, rangeEnd int64) (*http.Response, error) {
+func (f *Fetcher) tryFallbackToOriginalURL(ctx context.Context, client *http.Client, rangeStart int64, rangeEnd *int64, rangeRequested bool, ifRange string) (*http.Response, error) {
 	httpReq, err := f.buildRequestWithOriginalURL(ctx, f.meta.Req)
 	if err != nil {
 		return nil, err
 	}
 
-	if f.meta.Res.Range && rangeEnd > 0 {
-		httpReq.Header.Set(base.HttpHeaderRange,
-			fmt.Sprintf(base.HttpHeaderRangeFormat, rangeStart, rangeEnd))
+	if rangeRequested {
+		httpReq.Header.Set(base.HttpHeaderRange, formatRangeHeader(rangeStart, rangeEnd))
+		if ifRange != "" {
+			httpReq.Header.Set(base.HttpHeaderIfRange, ifRange)
+		}
 	}
 
 	resp, err := client.Do(httpReq)
@@ -187,6 +230,13 @@ func (f *Fetcher) tryFallbackToOriginalURL(ctx context.Context, client *http.Cli
 	}
 
 	return resp, nil
+}
+
+func formatRangeHeader(start int64, end *int64) string {
+	if end == nil {
+		return fmt.Sprintf("bytes=%d-", start)
+	}
+	return fmt.Sprintf(base.HttpHeaderRangeFormat, start, *end)
 }
 
 // buildClient creates an HTTP client with the default connection timeout.
@@ -216,21 +266,30 @@ func (f *Fetcher) buildFastFailClient() *http.Client {
 
 // buildClientWithTimeout creates an HTTP client with the specified connection timeout.
 func (f *Fetcher) buildClientWithTimeout(timeout time.Duration) *http.Client {
-	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout: timeout,
-		}).DialContext,
-		Proxy: f.ctl.GetProxy(f.meta.Req.Proxy),
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: f.meta.Req.SkipVerifyCert,
-		},
-		TLSHandshakeTimeout: timeout,
-	}
 	jar, _ := cookiejar.New(nil)
-	return &http.Client{
-		Transport: transport,
-		Jar:       jar,
+	client, err := httpclient.NewClient(httpclient.Options{
+		Client: httpclient.ClientOptions{
+			Jar: jar,
+		},
+		Transport: httpclient.TransportOptions{
+			DialContext: (&net.Dialer{
+				Timeout: timeout,
+			}).DialContext,
+			Proxy: f.ctl.GetProxy(f.meta.Req.Proxy),
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: f.meta.Req.SkipVerifyCert,
+			},
+			TLSHandshakeTimeout: timeout,
+		},
+		Impersonation: httpclient.ImpersonationOptions{
+			Mode:    httpclient.ImpersonationAuto,
+			Session: f.impersonationSession,
+		},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("build HTTP client: %v", err))
 	}
+	return client
 }
 
 // ============================================================================
@@ -254,6 +313,28 @@ func parseFilename(contentDisposition string) string {
 
 	// Fallback to manual parsing
 	return parseFilenameFallback(contentDisposition)
+}
+
+// appendFilenameExtension adds a MIME-derived extension when the resolved
+// filename has no usable extension. Some image hosts use opaque path segments
+// that look like extensions, even though the response Content-Type is the
+// only reliable source for the file type.
+func appendFilenameExtension(filename, contentType string) string {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return filename
+	}
+
+	extensions, err := mime.ExtensionsByType(mediaType)
+	if err != nil || len(extensions) == 0 {
+		return filename
+	}
+
+	ext := path.Ext(filename)
+	if len(ext) > 1 && len(ext) <= 20 {
+		return filename
+	}
+	return filename + extensions[0]
 }
 
 // parseFilenameExtended handles RFC 5987 extended notation (filename*=)

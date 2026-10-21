@@ -7,10 +7,13 @@ import (
 
 	"github.com/GopeedLab/gopeed/internal/controller"
 	"github.com/GopeedLab/gopeed/internal/fetcher"
+	"github.com/GopeedLab/gopeed/internal/production"
 	"github.com/GopeedLab/gopeed/internal/protocol/bt"
 	"github.com/GopeedLab/gopeed/internal/protocol/ed2k"
+	"github.com/GopeedLab/gopeed/internal/protocol/hls"
 	"github.com/GopeedLab/gopeed/internal/protocol/http"
 	"github.com/GopeedLab/gopeed/pkg/base"
+	enginewebview "github.com/GopeedLab/gopeed/pkg/download/engine/webview"
 	"github.com/GopeedLab/gopeed/pkg/util"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 )
@@ -20,6 +23,9 @@ type ResolveResult struct {
 	Res *base.Resource `json:"res"`
 }
 
+// Task represents a download unit.
+// Options flow path:
+// REST Request (model.CreateTask/ResolveTask) -> pkg/download Downloader -> Task.Meta.Opts (base.Options) -> Fetcher.Resolve/Start (e.g. internal/protocol/http/fetcher.go)
 type Task struct {
 	ID        string               `json:"id"`
 	Protocol  string               `json:"protocol"`
@@ -27,17 +33,55 @@ type Task struct {
 	Status    base.Status          `json:"status"`
 	Uploading bool                 `json:"uploading"`
 	Progress  *Progress            `json:"progress"`
-	IsCreated bool                 `json:"isCreated"`
 	CreatedAt time.Time            `json:"createdAt"`
 	UpdatedAt time.Time            `json:"updatedAt"`
+	// DoneAt is the time when the task completed; nil if it has never
+	// finished. A done task never leaves the done state, so the value is
+	// written once and kept.
+	DoneAt *time.Time `json:"doneAt"`
+
+	producer         production.Source
+	producerReceived int64
 
 	fetcherManager fetcher.FetcherManager
 	fetcher        fetcher.Fetcher
 	timer          *util.Timer
 	statusLock     *sync.Mutex
 	lock           *sync.Mutex
+	statsLock      *sync.Mutex
+	statsLoaded    bool
+	stats          *fetcher.Stats
+	statsSnapshot  json.RawMessage
+	blobRefLock    *sync.Mutex
+	blobURL        string
+	runGeneration  uint64
 	speedArr       []int64
 	uploadSpeedArr []int64
+}
+
+// TaskRuntimeStatus is the lightweight, frequently refreshed view of a task.
+// It intentionally excludes request, resource and option metadata returned by
+// Task so detail pages can poll progress without repeatedly transferring the
+// full task object.
+type TaskRuntimeStatus struct {
+	Status          base.Status         `json:"status"`
+	Used            int64               `json:"used"`
+	Speed           int64               `json:"speed"`
+	Downloaded      int64               `json:"downloaded"`
+	Total           int64               `json:"total"`
+	UploadSpeed     int64               `json:"uploadSpeed"`
+	Uploaded        int64               `json:"uploaded"`
+	ExtractStatus   ExtractStatus       `json:"extractStatus"`
+	ExtractProgress int                 `json:"extractProgress"`
+	Files           []FileRuntimeStatus `json:"files"`
+}
+
+// FileRuntimeStatus maps one value returned by fetcher.Progress to its
+// original resource index. Fetchers return progress in SelectFiles order.
+type FileRuntimeStatus struct {
+	Index      int   `json:"index"`
+	Size       int64 `json:"size"`
+	Downloaded int64 `json:"downloaded"`
 }
 
 func NewTask() *Task {
@@ -50,7 +94,6 @@ func NewTask() *Task {
 		Status:    base.DownloadStatusReady,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		IsCreated: false,
 	}
 }
 
@@ -86,10 +129,10 @@ func (t *Task) Name() string {
 func (t *Task) MarshalJSON() ([]byte, error) {
 	type rawTaskType Task
 	jsonTask := struct {
-		rawTaskType
+		*rawTaskType
 		Name string `json:"name"`
 	}{
-		rawTaskType(*t),
+		(*rawTaskType)(t),
 		t.Name(),
 	}
 	return json.Marshal(jsonTask)
@@ -98,6 +141,12 @@ func (t *Task) MarshalJSON() ([]byte, error) {
 func (t *Task) updateStatus(status base.Status) {
 	t.UpdatedAt = time.Now()
 	t.Status = status
+	// A done task never leaves the done state, so there is no branch to clear
+	// DoneAt on other transitions.
+	if status == base.DownloadStatusDone {
+		doneAt := time.Now()
+		t.DoneAt = &doneAt
+	}
 }
 
 func (t *Task) clone() *Task {
@@ -152,7 +201,9 @@ type DownloaderConfig struct {
 	RefreshInterval   int // RefreshInterval time duration to refresh task progress(ms)
 	Storage           Storage
 	StorageDir        string
+	TempDir           string
 	WhiteDownloadDirs []string
+	WebViewProvider   enginewebview.Provider
 
 	ProductionMode bool
 
@@ -165,6 +216,7 @@ func (cfg *DownloaderConfig) Init() *DownloaderConfig {
 	}
 	if len(cfg.FetchManagers) == 0 {
 		cfg.FetchManagers = []fetcher.FetcherManager{
+			new(hls.FetcherManager),
 			new(http.FetcherManager),
 			new(bt.FetcherManager),
 			new(ed2k.FetcherManager),

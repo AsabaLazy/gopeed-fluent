@@ -246,9 +246,8 @@ Future<void> testWebhook(String url) async {
       () => _client.dio.post("api/v1/webhook/test", data: {"url": url}), null);
 }
 
-Future<String> login(LoginReq loginReq) async {
-  return _parse(() => _client.dio.post("api/web/login", data: loginReq),
-      (data) => data as String);
+Future<void> login(LoginReq loginReq) async {
+  return _parse(() => _client.dio.post("api/web/login", data: loginReq), null);
 }
 
 Future<Response<String>> proxyRequest<T>(String uri,

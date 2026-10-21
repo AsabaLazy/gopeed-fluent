@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import '../../../../api/api.dart' as api;
 import '../../../../api/api.dart';
 import '../../../../api/model/login.dart';
-import '../../../../database/database.dart';
 import '../../../../util/message.dart';
 import '../../../routes/app_pages.dart';
 import '../../app/controllers/app_controller.dart';
@@ -37,9 +36,8 @@ class LoginController extends GetxController {
     try {
       final loginReq = LoginReq(username: usernameController.text.trim(), password: passwordController.text);
 
-      final token = await api.login(loginReq);
-      // Login successful, save the token
-      Database.instance.saveWebToken(token);
+      await api.login(loginReq);
+      // The backend stores the session in an HttpOnly cookie.
       // Reload config
       final controller = Get.put(AppController());
       await controller.loadDownloaderConfig();

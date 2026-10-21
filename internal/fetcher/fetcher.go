@@ -12,7 +12,7 @@ import (
 // Each download task will have a corresponding Fetcher instance for the management of the download task
 type Fetcher interface {
 	Setup(ctl *controller.Controller)
-	Resolve(req *base.Request, opts *base.Options) error
+	Resolve(req *base.Request) error
 	Start() error
 	// Patch modifies task-specific data based on the protocol.
 	// For HTTP: can modify Request info (URL, headers, etc.)
@@ -21,14 +21,23 @@ type Fetcher interface {
 	Pause() error
 	Close() error
 
-	// Stats refreshes health statistics and returns the latest information
-	Stats() any
+	// Stats returns both the durable protocol snapshot and transient runtime
+	// telemetry. Downloader persists Snapshot and keeps Runtime in memory only.
+	Stats() *Stats
 	// Meta returns the meta information of the download.
 	Meta() *FetcherMeta
 	// Progress returns the progress of the download.
 	Progress() Progress
 	// Wait for the download to complete, this method will block until the download is done.
 	Wait() error
+}
+
+// Stats separates protocol information that remains meaningful after a task
+// stops from telemetry that is valid only while the fetcher is active.
+// Protocols own both payload schemas; Downloader treats them as opaque values.
+type Stats struct {
+	Snapshot any `json:"snapshot"`
+	Runtime  any `json:"runtime"`
 }
 
 type Uploader interface {
@@ -97,7 +106,13 @@ func (s *SchemeFilter) Match(uri string) bool {
 	case FilterTypeUrl:
 		return strings.HasPrefix(uriUpper, patternUpper+":")
 	case FilterTypeFile:
-		return strings.HasSuffix(uriUpper, "."+patternUpper)
+		// Strip query and fragment before matching so URLs like
+		// https://example.com/video.m3u8?sign=abc still route by extension.
+		clean := uri
+		if idx := strings.IndexAny(clean, "?#"); idx >= 0 {
+			clean = clean[:idx]
+		}
+		return strings.HasSuffix(strings.ToUpper(clean), "."+patternUpper)
 	case FilterTypeBase64:
 		return strings.HasPrefix(uriUpper, "DATA:"+patternUpper+";BASE64,")
 	}
