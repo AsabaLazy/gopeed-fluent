@@ -258,7 +258,7 @@ Future<Response<String>> proxyRequest<T>(String uri,
 
   // add timestamp to avoid cache
   return _client.dio.request(
-      "/api/v1/proxy?t=${DateTime.now().millisecondsSinceEpoch}",
+      "/api/web/proxy?t=${DateTime.now().millisecondsSinceEpoch}",
       data: data,
       options: options);
 }
