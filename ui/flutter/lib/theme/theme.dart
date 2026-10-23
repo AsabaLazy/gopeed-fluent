@@ -63,6 +63,7 @@ extension ResourceDictionaryExt on ResourceDictionary {
     Color? controlFillColorDefault,
     Color? controlFillColorSecondary,
     Color? controlFillColorTertiary,
+    Color? controlFillColorQuarternary,
     Color? controlFillColorDisabled,
     Color? controlFillColorTransparent,
     Color? controlFillColorInputActive,
@@ -102,6 +103,7 @@ extension ResourceDictionaryExt on ResourceDictionary {
     Color? focusStrokeColorInner,
     Color? cardBackgroundFillColorDefault,
     Color? cardBackgroundFillColorSecondary,
+    Color? cardBackgroundFillColorTertiary,
     Color? smokeFillColorDefault,
     Color? layerFillColorDefault,
     Color? layerFillColorAlt,
@@ -115,6 +117,8 @@ extension ResourceDictionaryExt on ResourceDictionary {
     Color? solidBackgroundFillColorSecondary,
     Color? solidBackgroundFillColorTertiary,
     Color? solidBackgroundFillColorQuarternary,
+    Color? solidBackgroundFillColorQuinary,
+    Color? solidBackgroundFillColorSenary,
     Color? solidBackgroundFillColorTransparent,
     Color? solidBackgroundFillColorBaseAlt,
     Color? systemFillColorSuccess,
@@ -144,6 +148,7 @@ extension ResourceDictionaryExt on ResourceDictionary {
       controlFillColorDefault: controlFillColorDefault ?? this.controlFillColorDefault,
       controlFillColorSecondary: controlFillColorSecondary ?? this.controlFillColorSecondary,
       controlFillColorTertiary: controlFillColorTertiary ?? this.controlFillColorTertiary,
+      controlFillColorQuarternary: controlFillColorQuarternary ?? this.controlFillColorQuarternary,
       controlFillColorDisabled: controlFillColorDisabled ?? this.controlFillColorDisabled,
       controlFillColorTransparent: controlFillColorTransparent ?? this.controlFillColorTransparent,
       controlFillColorInputActive: controlFillColorInputActive ?? this.controlFillColorInputActive,
@@ -185,6 +190,7 @@ extension ResourceDictionaryExt on ResourceDictionary {
       focusStrokeColorInner: focusStrokeColorInner ?? this.focusStrokeColorInner,
       cardBackgroundFillColorDefault: cardBackgroundFillColorDefault ?? this.cardBackgroundFillColorDefault,
       cardBackgroundFillColorSecondary: cardBackgroundFillColorSecondary ?? this.cardBackgroundFillColorSecondary,
+      cardBackgroundFillColorTertiary: cardBackgroundFillColorTertiary ?? this.cardBackgroundFillColorTertiary,
       smokeFillColorDefault: smokeFillColorDefault ?? this.smokeFillColorDefault,
       layerFillColorDefault: layerFillColorDefault ?? this.layerFillColorDefault,
       layerFillColorAlt: layerFillColorAlt ?? this.layerFillColorAlt,
@@ -203,6 +209,10 @@ extension ResourceDictionaryExt on ResourceDictionary {
       solidBackgroundFillColorTertiary: solidBackgroundFillColorTertiary ?? this.solidBackgroundFillColorTertiary,
       solidBackgroundFillColorQuarternary:
           solidBackgroundFillColorQuarternary ?? this.solidBackgroundFillColorQuarternary,
+      solidBackgroundFillColorQuinary:
+          solidBackgroundFillColorQuinary ?? this.solidBackgroundFillColorQuinary,
+      solidBackgroundFillColorSenary:
+          solidBackgroundFillColorSenary ?? this.solidBackgroundFillColorSenary,
       solidBackgroundFillColorTransparent:
           solidBackgroundFillColorTransparent ?? this.solidBackgroundFillColorTransparent,
       solidBackgroundFillColorBaseAlt: solidBackgroundFillColorBaseAlt ?? this.solidBackgroundFillColorBaseAlt,

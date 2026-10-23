@@ -20,8 +20,6 @@ import '../modules/task/bindings/task_files_binding.dart';
 import '../modules/task/views/task_done_view.dart';
 import '../modules/task/views/task_files_view.dart';
 import '../modules/task/views/task_view.dart';
-import '../modules/task/bindings/task_done_binding.dart';
-import '../modules/task/views/task_done_view.dart';
 
 part 'app_routes.dart';
 
@@ -48,7 +46,8 @@ class AppPages {
             GetPage(
               name: _Paths.TASK,
               page: () => const TaskView(),
-              transition: Transition.fade,
+              transition: Transition.noTransition,
+              transitionDuration: Duration.zero,
               binding: TaskBinding(),
               children: [
                 GetPage(
@@ -76,18 +75,21 @@ class AppPages {
               name: _Paths.TASK_DONE,
               page: () => const TaskDoneView(),
               binding: TaskDoneBinding(),
-              transition: Transition.fade,
+              transition: Transition.noTransition,
+              transitionDuration: Duration.zero,
             ),
             GetPage(
               name: _Paths.EXTENSION,
               page: () => ExtensionView(),
-              transition: Transition.fade,
+              transition: Transition.noTransition,
+              transitionDuration: Duration.zero,
               binding: ExtensionBinding(),
             ),
             GetPage(
               name: _Paths.SETTING,
               page: () => const SettingView(),
-              transition: Transition.fade,
+              transition: Transition.noTransition,
+              transitionDuration: Duration.zero,
               binding: SettingBinding(),
             ),
           ],

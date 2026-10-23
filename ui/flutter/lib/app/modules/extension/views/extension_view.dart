@@ -142,45 +142,7 @@ class ExtensionView extends GetView<ExtensionController> {
             const SizedBox(height: 12),
             Obx(() => UniversalPaneChild(child: _buildFilterBar(context))),
             const SizedBox(height: 12),
-            Expanded(
-              child: ListView(
-                children: [
-                  UniversalPaneChild(child: _buildUnifiedGrid(context)),
-                  if (controller.listFilter.value == ExtensionListFilter.market &&
-                      controller.storePagination.value?.hasNext == true) ...[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.center,
-                      child: Button(
-                        onPressed: controller.loadingMoreStore.value ? null : controller.loadMoreStore,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          spacing: 8,
-                          children: [
-                            controller.loadingMoreStore.value
-                                ? const SizedBox(width: 14, height: 14, child: ProgressRing(strokeWidth: 2))
-                                : const Icon(FluentIcons.chevron_circle_down_16_regular, size: 14.0),
-                            Text('extensionLoadMore'.tr),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (controller.listFilter.value == ExtensionListFilter.market &&
-                      controller.storePagination.value != null &&
-                      controller.storeExtensions.isNotEmpty &&
-                      controller.storePagination.value!.hasNext == false) ...[
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Text(
-                        'extensionNoMore'.tr,
-                        style: FluentTheme.of(context).typography.caption?.copyWith(color: Get.theme.hintColor),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+            Expanded(child: _buildUnifiedList(context)),
           ],
         ),
       ),
@@ -288,21 +250,72 @@ class ExtensionView extends GetView<ExtensionController> {
     return left;
   }
 
-  Widget _buildUnifiedGrid(BuildContext context) {
+  Widget _buildUnifiedList(BuildContext context) {
     final items = controller.displayItems;
     final loading = controller.loadingInstalled.value || controller.loadingStore.value;
     if (loading && items.isEmpty) {
       return const Center(child: ProgressRing());
     }
     if (items.isEmpty) {
-      return Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text('extensionStoreEmpty'.tr));
+      return UniversalPaneChild(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Text('extensionStoreEmpty'.tr),
+        ),
+      );
     }
+
+    final market = controller.listFilter.value == ExtensionListFilter.market;
+    final hasNext = market && (controller.storePagination.value?.hasNext ?? false);
+    final showNoMore = market &&
+        controller.storePagination.value != null &&
+        controller.storeExtensions.isNotEmpty &&
+        controller.storePagination.value!.hasNext == false;
+    final footerCount = (hasNext ? 1 : 0) + (showNoMore ? 1 : 0);
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      itemCount: items.length,
-      shrinkWrap: true,
-      itemBuilder: (context, index) => _buildUnifiedCard(context, items[index]),
+      itemCount: items.length + footerCount,
+      itemBuilder: (context, index) {
+        if (index < items.length) {
+          return UniversalPaneChild(child: _buildUnifiedCard(context, items[index]));
+        }
+        final footer = index - items.length;
+        if (hasNext && footer == 0) {
+          return UniversalPaneChild(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Align(
+                alignment: Alignment.center,
+                child: Button(
+                  onPressed: controller.loadingMoreStore.value ? null : controller.loadMoreStore,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 8,
+                    children: [
+                      controller.loadingMoreStore.value
+                          ? const SizedBox(width: 14, height: 14, child: ProgressRing(strokeWidth: 2))
+                          : const Icon(FluentIcons.chevron_circle_down_16_regular, size: 14.0),
+                      Text('extensionLoadMore'.tr),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        return UniversalPaneChild(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Center(
+              child: Text(
+                'extensionNoMore'.tr,
+                style: FluentTheme.of(context).typography.caption?.copyWith(color: Get.theme.hintColor),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

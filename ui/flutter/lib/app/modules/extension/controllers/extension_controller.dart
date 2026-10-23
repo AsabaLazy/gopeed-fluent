@@ -9,6 +9,7 @@ import '../../../../api/model/extension.dart';
 import '../../../../api/model/install_extension.dart';
 import '../../../../api/model/store_extension.dart';
 import '../../../../api/model/switch_extension.dart';
+import '../../../../util/log_util.dart';
 
 enum ExtensionListFilter {
   market,
@@ -118,6 +119,8 @@ class ExtensionController extends GetxController {
       if (refreshUpdates) {
         await checkUpdate();
       }
+    } catch (e) {
+      logger.w("load installed extensions fail", e);
     } finally {
       loadingInstalled.value = false;
     }
@@ -149,6 +152,8 @@ class ExtensionController extends GetxController {
       );
       storeExtensions.assignAll(page.data);
       storePagination.value = page.pagination;
+    } catch (e) {
+      logger.w("refresh extension store fail", e);
     } finally {
       loadingStore.value = false;
     }
@@ -169,6 +174,8 @@ class ExtensionController extends GetxController {
       );
       storeExtensions.addAll(page.data);
       storePagination.value = page.pagination;
+    } catch (e) {
+      logger.w("load more extension store fail", e);
     } finally {
       loadingMoreStore.value = false;
     }

@@ -331,7 +331,7 @@ class SettingView extends GetView<SettingController> {
       return _SettingExpanderItem(
         icon: FluentIcons.puzzle_piece_24_regular,
         title: 'browserExtension'.tr,
-        content: Column(
+        contentBuilder: () => Column(
           children: [
             _buildLinkItem(
               "Chrome",
@@ -901,7 +901,6 @@ class SettingView extends GetView<SettingController> {
             }).toList(),
             onChanged: (value) async {
               downloaderCfg.update((val) => val?.extra.themeMode = value!.name);
-              Get.changeThemeMode(ThemeMode.values.byName(value!.name));
               Get.forceAppUpdate();
               await debounceSave();
             },
@@ -968,7 +967,7 @@ class SettingView extends GetView<SettingController> {
                 )
               : widget;
         }),
-        content: Column(
+        contentBuilder: () => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _SettingItem(
@@ -1591,6 +1590,7 @@ class SettingView extends GetView<SettingController> {
     return BasePaneBody.scrollable(
       title: 'setting'.tr,
       spacing: 24,
+      lazy: true,
       children: [
         _SettingSection(
           sectionTitle: 'general'.tr,
@@ -1733,7 +1733,7 @@ class SettingView extends GetView<SettingController> {
           _tapInputWidget(inputKey, value);
         });
       },
-      content: Container(padding: const EdgeInsets.all(8), child: keyBuilder(inputKey)),
+      contentBuilder: () => Container(padding: const EdgeInsets.all(8), child: keyBuilder(inputKey)),
     );
   }
 
@@ -2198,7 +2198,7 @@ class _SettingItem extends StatelessWidget {
 }
 
 ///SettingExpanderItem
-class _SettingExpanderItem extends StatelessWidget {
+class _SettingExpanderItem extends StatefulWidget {
   const _SettingExpanderItem({
     this.icon,
     this.iconWidget,
@@ -2206,7 +2206,7 @@ class _SettingExpanderItem extends StatelessWidget {
     this.subTitle,
     this.subWidget,
     this.trailing,
-    required this.content,
+    required this.contentBuilder,
     this.onStateChanged,
   });
 
@@ -2216,39 +2216,63 @@ class _SettingExpanderItem extends StatelessWidget {
   final String? subTitle;
   final Widget? subWidget;
   final Widget? trailing;
-  final Widget content;
+  final Widget Function() contentBuilder;
   final ValueChanged<bool>? onStateChanged;
+
+  @override
+  State<_SettingExpanderItem> createState() => _SettingExpanderItemState();
+}
+
+class _SettingExpanderItemState extends State<_SettingExpanderItem> {
+  final _expanderKey = GlobalKey<ExpanderState>();
+  bool _contentBuilt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_contentBuilt && _expanderKey.currentState?.isExpanded == true) {
+        setState(() => _contentBuilt = true);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Expander(
-      leading: icon == null && iconWidget == null
+      key: _expanderKey,
+      leading: widget.icon == null && widget.iconWidget == null
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(right: 6.0),
-              child: SizedBox(height: 24, width: 24, child: iconWidget ?? Icon(icon, size: 24.0)),
+              child: SizedBox(height: 24, width: 24, child: widget.iconWidget ?? Icon(widget.icon, size: 24.0)),
             ),
-      header: subTitle == null && subWidget == null
-          ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(title))
+      header: widget.subTitle == null && widget.subWidget == null
+          ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(widget.title))
           : Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title),
+                  Text(widget.title),
                   DefaultTextStyle(
                     style: FluentTheme.of(context).typography.caption ?? const TextStyle(),
-                    child: subWidget ?? Text(subTitle!),
+                    child: widget.subWidget ?? Text(widget.subTitle!),
                   ),
                 ],
               ),
             ),
-      trailing: trailing != null
-          ? ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: trailing)
+      trailing: widget.trailing != null
+          ? ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: widget.trailing)
           : null,
       contentPadding: EdgeInsets.zero,
-      onStateChanged: onStateChanged,
-      content: content,
+      onStateChanged: (value) {
+        if (value && !_contentBuilt) {
+          setState(() => _contentBuilt = true);
+        }
+        widget.onStateChanged?.call(value);
+      },
+      content: _contentBuilt ? widget.contentBuilder() : const SizedBox.shrink(),
     );
   }
 }

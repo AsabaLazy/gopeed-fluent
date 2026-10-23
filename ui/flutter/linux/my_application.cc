@@ -27,6 +27,18 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
+  // Keep the native window rectangular. The compositor/GTK theme must not
+  // round the surface: the Flutter content now fills the full frame.
+  GdkScreen* window_screen = gtk_window_get_screen(window);
+  g_autoptr(GtkCssProvider) window_css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(
+      window_css,
+      "window, .background { border-radius: 0; box-shadow: none; }",
+      -1, nullptr);
+  gtk_style_context_add_provider_for_screen(
+      window_screen, GTK_STYLE_PROVIDER(window_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
   // desktop).

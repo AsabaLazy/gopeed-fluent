@@ -79,8 +79,7 @@ dependencies:
   dart_ipc: ^1.0.1
   flutter_local_notifications: 20.1.0
   equatable: ^2.0.7
-  fluent_ui: ^4.11.5
-  math_expressions: ^2.7.0 # fix fluent_ui
+  fluent_ui: ^4.17.0
   fluentui_system_icons: ^1.1.273
   checkable_treeview_fluent:
     git:

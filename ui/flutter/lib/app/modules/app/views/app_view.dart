@@ -17,39 +17,53 @@ class AppView extends GetView<AppController> {
 
   @override
   Widget build(BuildContext context) {
-    final config = controller.downloaderConfig.value;
-    return WithForegroundTask(
-      child: GetFluentApp.router(
-        useInheritedMediaQuery: true,
-        debugShowCheckedModeBanner: false,
-        theme: GopeedTheme.light,
-        darkTheme: GopeedTheme.dark,
-        themeMode: ThemeMode.values.byName(config.extra.themeMode),
-        translations: messages,
-        locale: toLocale(config.extra.locale),
-        fallbackLocale: fallbackLocale,
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: messages.keys.keys.map((e) => toLocale(e)).toList(),
-        getPages: AppPages.routes,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The native window can briefly report a 1x1 surface while it is being
+        // shown or restored. Building NavigationView at that size overflows.
+        if (constraints.maxWidth <= 1 || constraints.maxHeight <= 1) {
+          return const SizedBox.shrink();
+        }
+        final config = controller.downloaderConfig.value;
+        final app = WithForegroundTask(
+          child: GetFluentApp.router(
+            useInheritedMediaQuery: true,
+            debugShowCheckedModeBanner: false,
+            theme: GopeedTheme.light,
+            darkTheme: GopeedTheme.dark,
+            themeMode: ThemeMode.values.byName(config.extra.themeMode),
+            translations: messages,
+            locale: toLocale(config.extra.locale),
+            fallbackLocale: fallbackLocale,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: messages.keys.keys
+                .map((e) => toLocale(e))
+                .toList(),
+            getPages: AppPages.routes,
 
-        // Add listening to theme changes, set the title bar color according to the current system theme.
-        builder: (context, child) {
-          // if platform is desktop
-          if (Util.isDesktop()) {
-            // actual brightness of the UI
-            Brightness brightness = FluentTheme.of(context).brightness;
-            // Set the title bar to use the actual brightness of the UI
-            windowManager.setBrightness(brightness);
-          }
-          // Fix for GetX Overlay issue with Flutter 3.38.1+
-          // Reference: https://github.com/jonataslaw/getx/issues/3425
-          return Overlay(initialEntries: [OverlayEntry(builder: (_) => child!)]);
-        },
-      ),
+            // Add listening to theme changes, set the title bar color according to the current system theme.
+            builder: (context, child) {
+              // if platform is desktop
+              if (Util.isDesktop()) {
+                // actual brightness of the UI
+                Brightness brightness = FluentTheme.of(context).brightness;
+                // Set the title bar to use the actual brightness of the UI
+                windowManager.setBrightness(brightness);
+              }
+              // Fix for GetX Overlay issue with Flutter 3.38.1+
+              // Reference: https://github.com/jonataslaw/getx/issues/3425
+              return Overlay(
+                initialEntries: [OverlayEntry(builder: (_) => child!)],
+              );
+            },
+          ),
+        );
+        return app;
+      },
     );
   }
 }

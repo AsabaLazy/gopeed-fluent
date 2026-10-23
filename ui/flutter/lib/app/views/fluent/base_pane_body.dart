@@ -14,8 +14,9 @@ class BasePaneBody extends StatelessWidget {
     this.titleActions,
     ScrollController? scrollController,
     final double spacing = 0,
+    final bool lazy = false,
     required List<Widget> children,
-  }) : body = UniversalScrollView(controller: scrollController, spacing: spacing, children: children);
+  }) : body = UniversalScrollView(controller: scrollController, spacing: spacing, lazy: lazy, children: children);
 
   @override
   Widget build(BuildContext context) {
