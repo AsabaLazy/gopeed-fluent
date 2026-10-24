@@ -22,6 +22,19 @@ import 'model/task.dart';
 import 'model/update_check_extension_resp.dart';
 import 'model/update_extension_settings.dart';
 
+/// External HTTP client used for the Gopeed site, update checks and
+/// user-provided subscription URLs. It is separate from the local API client
+/// because the latter may be bound to a Unix socket.
+final Dio _externalDio = Dio(
+  BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    sendTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
+    // User-Agent is a forbidden header in browsers; only set it natively.
+    headers: Util.isWeb() ? null : const {'User-Agent': 'gopeed-fluent'},
+  ),
+);
+
 class _Client {
   static _Client? _instance;
 
@@ -250,17 +263,28 @@ Future<void> login(LoginReq loginReq) async {
   return _parse(() => _client.dio.post("api/web/login", data: loginReq), null);
 }
 
-Future<Response<String>> proxyRequest<T>(String uri,
-    {data, Options? options}) async {
+/// Fetches an absolute external URL. The removed backend proxy used to be
+/// involved here; that route no longer exists, and a direct request also
+/// avoids turning the local API into an SSRF surface.
+Future<Response<String>> proxyRequest<T>(
+  String uri, {
+  dynamic data,
+  Options? options,
+}) async {
   options ??= Options();
-  options.headers ??= {};
-  options.headers!["X-Target-Uri"] = uri;
+  options.responseType ??= ResponseType.plain;
+  return _externalDio.request<String>(uri, data: data, options: options);
+}
 
-  // add timestamp to avoid cache
-  return _client.dio.request(
-      "/api/web/proxy?t=${DateTime.now().millisecondsSinceEpoch}",
-      data: data,
-      options: options);
+Future<void> triggerProtocolJob(String protocol, String name) {
+  return _parse(
+    () => _client.dio.post(
+      'api/v1/protocols/${Uri.encodeComponent(protocol)}/jobs/'
+      '${Uri.encodeComponent(name)}/trigger',
+      options: Options(receiveTimeout: const Duration(seconds: 120)),
+    ),
+    null,
+  );
 }
 
 String join(String path) {

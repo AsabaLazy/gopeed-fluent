@@ -12,11 +12,6 @@ class GopeedSiteApi {
 
   static const _host = 'gopeed.com';
 
-  Future<Map<String, dynamic>> getRelease() async {
-    final json = await _getJson('/api/release');
-    return json as Map<String, dynamic>;
-  }
-
   Future<StoreExtensionPage> getExtensions({
     int page = 1,
     int limit = 20,

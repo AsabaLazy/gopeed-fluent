@@ -17,6 +17,87 @@ const showLogoRoutes = [
   Routes.SETTING,
 ];
 
+/// Detects a title-bar double click without putting a gesture recognizer in
+/// the arena for the caption buttons. A Listener observes the pointer events
+/// but does not consume them, so minimize/maximize/close stay single-click
+/// responsive.
+class _TitleBarDoubleClickArea extends StatefulWidget {
+  const _TitleBarDoubleClickArea({
+    required this.child,
+    required this.onDoubleClick,
+    this.excludeLeft = 0,
+    this.excludeRight = 140,
+  });
+
+  final Widget child;
+  final VoidCallback onDoubleClick;
+  final double excludeLeft;
+  final double excludeRight;
+
+  @override
+  State<_TitleBarDoubleClickArea> createState() =>
+      _TitleBarDoubleClickAreaState();
+}
+
+class _TitleBarDoubleClickAreaState extends State<_TitleBarDoubleClickArea> {
+  DateTime? _lastTapTime;
+  Offset? _lastTapPosition;
+  Offset? _downPosition;
+
+  void _onPointerDown(PointerDownEvent event) {
+    _downPosition = event.position;
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    final downPosition = _downPosition;
+    _downPosition = null;
+    if (downPosition != null &&
+        (event.position - downPosition).distance > 8) {
+      _lastTapTime = null;
+      _lastTapPosition = null;
+      return;
+    }
+
+    final width = MediaQuery.sizeOf(context).width;
+    if (event.position.dx < widget.excludeLeft ||
+        event.position.dx > width - widget.excludeRight) {
+      _lastTapTime = null;
+      _lastTapPosition = null;
+      return;
+    }
+
+    final now = DateTime.now();
+    final lastTime = _lastTapTime;
+    final lastPosition = _lastTapPosition;
+    if (lastTime != null &&
+        lastPosition != null &&
+        now.difference(lastTime) <= const Duration(milliseconds: 350) &&
+        (event.position - lastPosition).distance <= 6) {
+      _lastTapTime = null;
+      _lastTapPosition = null;
+      widget.onDoubleClick();
+    } else {
+      _lastTapTime = now;
+      _lastTapPosition = event.position;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _onPointerDown,
+      onPointerUp: _onPointerUp,
+      onPointerCancel: (_) {
+        _downPosition = null;
+        _lastTapTime = null;
+        _lastTapPosition = null;
+      },
+      child: widget.child,
+    );
+  }
+}
+
 class HomeView extends GetView<HomeController> {
   const HomeView({Key? key}) : super(key: key);
 
@@ -69,38 +150,41 @@ class HomeView extends GetView<HomeController> {
               ),
             ),
             child: NavigationView(
-              titleBar: TitleBar(
-                isBackButtonVisible: !showLogo,
-                onBackRequested: showLogo ? null : delegate.popRoute,
-                onDragStarted: () => windowManager.startDragging(),
-                // Keep the double-tap recognizer off the title bar root.
-                // Otherwise its timeout delays every child button
-                // (caption buttons) by ~300ms.
-                icon: showLogo
-                    ? const Padding(
-                        padding: EdgeInsetsDirectional.only(start: 12),
-                        child: AppLogo(size: 25),
-                      )
-                    : null,
-                title: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onDoubleTap: toggleMaximized,
-                  child: Align(
+              titleBar: _TitleBarDoubleClickArea(
+                onDoubleClick: toggleMaximized,
+                excludeLeft: showLogo ? 0 : 50,
+                excludeRight: 140,
+                child: TitleBar(
+                  isBackButtonVisible: !showLogo,
+                  onBackRequested: showLogo ? null : delegate.popRoute,
+                  onDragStarted: () => windowManager.startDragging(),
+                  icon: showLogo
+                      ? const Padding(
+                          padding: EdgeInsetsDirectional.only(start: 12),
+                          child: AppLogo(size: 25),
+                        )
+                      : null,
+                  title: Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: Text('appNameMod'.tr),
                   ),
+                  captionControls: const WindowButtons(),
                 ),
-                captionControls: const WindowButtons(),
               ),
               paneBodyBuilder: (item, c) {
-                return GetRouterOutlet(
-                  initialRoute: Routes.TASK,
-                  // anchorRoute: '/',
-                  // filterPages: (afterAnchor) {
-                  //   logger.w(afterAnchor);
-                  //   logger.w(afterAnchor.take(1));
-                  //   return afterAnchor.take(1);
-                  // },
+                return FluentTheme(
+                  data: FluentTheme.of(
+                    context,
+                  ).copyWith(visualDensity: theme.visualDensity),
+                  child: GetRouterOutlet(
+                    initialRoute: Routes.TASK,
+                    // anchorRoute: '/',
+                    // filterPages: (afterAnchor) {
+                    //   logger.w(afterAnchor);
+                    //   logger.w(afterAnchor.take(1));
+                    //   return afterAnchor.take(1);
+                    // },
+                  ),
                 );
               },
               pane: NavigationPane(

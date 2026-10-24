@@ -253,6 +253,8 @@ class ExtensionView extends GetView<ExtensionController> {
   Widget _buildUnifiedList(BuildContext context) {
     final items = controller.displayItems;
     final loading = controller.loadingInstalled.value || controller.loadingStore.value;
+    final market = controller.listFilter.value == ExtensionListFilter.market;
+    final storeError = controller.storeError.value;
     if (loading && items.isEmpty) {
       return const Center(child: ProgressRing());
     }
@@ -260,12 +262,37 @@ class ExtensionView extends GetView<ExtensionController> {
       return UniversalPaneChild(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Text('extensionStoreEmpty'.tr),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('extensionStoreEmpty'.tr),
+              if (market && storeError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  storeError,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: FluentTheme.of(context).typography.caption,
+                ),
+                const SizedBox(height: 8),
+                Button(
+                  onPressed: controller.refreshStore,
+                  child: Text('update'.tr),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
 
-    final market = controller.listFilter.value == ExtensionListFilter.market;
+    // Snapshot reactive values during the Obx build. ListView's itemBuilder
+    // runs later during layout, outside GetX's tracking scope.
+    final busyIds = controller.busyExtensionIds.toSet();
+    final canUpdateById = <String, bool>{
+      for (final item in items) item.id: controller.canUpdateItem(item),
+    };
+    final loadingMore = controller.loadingMoreStore.value;
     final hasNext = market && (controller.storePagination.value?.hasNext ?? false);
     final showNoMore = market &&
         controller.storePagination.value != null &&
@@ -278,7 +305,15 @@ class ExtensionView extends GetView<ExtensionController> {
       itemCount: items.length + footerCount,
       itemBuilder: (context, index) {
         if (index < items.length) {
-          return UniversalPaneChild(child: _buildUnifiedCard(context, items[index]));
+          final item = items[index];
+          return UniversalPaneChild(
+            child: _buildUnifiedCard(
+              context,
+              item,
+              busy: busyIds.contains(item.id),
+              canUpdate: canUpdateById[item.id] ?? false,
+            ),
+          );
         }
         final footer = index - items.length;
         if (hasNext && footer == 0) {
@@ -288,12 +323,12 @@ class ExtensionView extends GetView<ExtensionController> {
               child: Align(
                 alignment: Alignment.center,
                 child: Button(
-                  onPressed: controller.loadingMoreStore.value ? null : controller.loadMoreStore,
+                  onPressed: loadingMore ? null : controller.loadMoreStore,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     spacing: 8,
                     children: [
-                      controller.loadingMoreStore.value
+                      loadingMore
                           ? const SizedBox(width: 14, height: 14, child: ProgressRing(strokeWidth: 2))
                           : const Icon(FluentIcons.chevron_circle_down_16_regular, size: 14.0),
                       Text('extensionLoadMore'.tr),
@@ -319,11 +354,14 @@ class ExtensionView extends GetView<ExtensionController> {
     );
   }
 
-  Widget _buildUnifiedCard(BuildContext context, ExtensionListItem item) {
+  Widget _buildUnifiedCard(
+    BuildContext context,
+    ExtensionListItem item, {
+    required bool busy,
+    required bool canUpdate,
+  }) {
     final installed = item.installed;
     final store = item.store;
-    final canUpdate = controller.canUpdateItem(item);
-    final busy = controller.busyExtensionIds.contains(item.id);
 
     return ExtensionCard(
       item: item,

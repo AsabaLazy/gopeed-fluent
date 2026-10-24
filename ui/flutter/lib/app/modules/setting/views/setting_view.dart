@@ -560,7 +560,7 @@ class SettingView extends GetView<SettingController> {
       FluentIcons.link_multiple_24_regular,
       'subscribeTracker',
       trailing: Obx(
-        () => Text('items'.trParams({'count': appController.btExtConfig.trackerSubscribeUrls.length.toString()})),
+        () => Text('items'.trParams({'count': appController.btConfig.trackerSubscribeUrls.length.toString()})),
       ),
       keyBuilder: (Key key) {
         final trackerUpdateController = OutlinedButtonLoadingController();
@@ -572,18 +572,18 @@ class SettingView extends GetView<SettingController> {
               height: 200,
               child: CheckListView(
                 items: allTrackerSubscribeUrls,
-                checked: appController.btExtConfig.trackerSubscribeUrls,
+                checked: appController.btConfig.trackerSubscribeUrls,
                 onChanged: (value) {
-                  downloaderCfg.update((val) => val!.extra.bt.trackerSubscribeUrls = value);
+                  downloaderCfg.update((val) => val!.protocolConfig.bt.trackerSubscribeUrls = value);
                   debounceSave();
                 },
               ),
             ),
             Obx(
               () => ToggleSwitch(
-                checked: appController.btExtConfig.autoUpdateTrackers,
+                checked: appController.btConfig.autoUpdateTrackers,
                 onChanged: (bool value) {
-                  downloaderCfg.update((val) => val!.extra.bt.autoUpdateTrackers = value);
+                  downloaderCfg.update((val) => val!.protocolConfig.bt.autoUpdateTrackers = value);
                   debounceSave();
                 },
                 content: Text('updateDaily'.tr),
@@ -628,11 +628,11 @@ class SettingView extends GetView<SettingController> {
       FluentIcons.cloud_link_24_regular,
       'addTracker',
       trailing: Obx(
-        () => Text('items'.trParams({'count': appController.btExtConfig.customTrackers.length.toString()})),
+        () => Text('items'.trParams({'count': appController.btConfig.customTrackers.length.toString()})),
       ),
       keyBuilder: (Key key) {
         final trackersController = TextEditingController(
-          text: appController.btExtConfig.customTrackers.join('\r\n').toString(),
+          text: appController.btConfig.customTrackers.join('\r\n').toString(),
         );
         return TextBox(
           key: key,
@@ -642,8 +642,7 @@ class SettingView extends GetView<SettingController> {
           maxLines: 5,
           placeholder: 'addTrackerHit'.tr,
           onChanged: (value) async {
-            downloaderCfg.update((val) => val!.extra.bt.customTrackers = Util.textToLines(value));
-            appController.refreshTrackers();
+            downloaderCfg.update((val) => val!.protocolConfig.bt.customTrackers = Util.textToLines(value));
             await debounceSave();
           },
         );
@@ -2223,9 +2222,13 @@ class _SettingExpanderItem extends StatefulWidget {
   State<_SettingExpanderItem> createState() => _SettingExpanderItemState();
 }
 
-class _SettingExpanderItemState extends State<_SettingExpanderItem> {
+class _SettingExpanderItemState extends State<_SettingExpanderItem>
+    with AutomaticKeepAliveClientMixin {
   final _expanderKey = GlobalKey<ExpanderState>();
   bool _contentBuilt = false;
+
+  @override
+  bool get wantKeepAlive => _contentBuilt;
 
   @override
   void initState() {
@@ -2239,40 +2242,41 @@ class _SettingExpanderItemState extends State<_SettingExpanderItem> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Expander(
-      key: _expanderKey,
-      leading: widget.icon == null && widget.iconWidget == null
-          ? const SizedBox.shrink()
-          : Padding(
-              padding: const EdgeInsets.only(right: 6.0),
-              child: SizedBox(height: 24, width: 24, child: widget.iconWidget ?? Icon(widget.icon, size: 24.0)),
-            ),
-      header: widget.subTitle == null && widget.subWidget == null
-          ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(widget.title))
-          : Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.title),
-                  DefaultTextStyle(
-                    style: FluentTheme.of(context).typography.caption ?? const TextStyle(),
-                    child: widget.subWidget ?? Text(widget.subTitle!),
-                  ),
-                ],
+        key: _expanderKey,
+        leading: widget.icon == null && widget.iconWidget == null
+            ? const SizedBox.shrink()
+            : Padding(
+                padding: const EdgeInsets.only(right: 6.0),
+                child: SizedBox(height: 24, width: 24, child: widget.iconWidget ?? Icon(widget.icon, size: 24.0)),
               ),
-            ),
-      trailing: widget.trailing != null
-          ? ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: widget.trailing)
-          : null,
-      contentPadding: EdgeInsets.zero,
-      onStateChanged: (value) {
-        if (value && !_contentBuilt) {
-          setState(() => _contentBuilt = true);
-        }
-        widget.onStateChanged?.call(value);
-      },
-      content: _contentBuilt ? widget.contentBuilder() : const SizedBox.shrink(),
+        header: widget.subTitle == null && widget.subWidget == null
+            ? Container(padding: const EdgeInsets.symmetric(vertical: 24), child: Text(widget.title))
+            : Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.title),
+                    DefaultTextStyle(
+                      style: FluentTheme.of(context).typography.caption ?? const TextStyle(),
+                      child: widget.subWidget ?? Text(widget.subTitle!),
+                    ),
+                  ],
+                ),
+              ),
+        trailing: widget.trailing != null
+            ? ConstrainedBox(constraints: const BoxConstraints(maxWidth: 150), child: widget.trailing)
+            : null,
+        contentPadding: EdgeInsets.zero,
+        onStateChanged: (value) {
+          if (value && !_contentBuilt) {
+            setState(() => _contentBuilt = true);
+          }
+          widget.onStateChanged?.call(value);
+        },
+        content: _contentBuilt ? widget.contentBuilder() : const SizedBox.shrink(),
     );
   }
 }

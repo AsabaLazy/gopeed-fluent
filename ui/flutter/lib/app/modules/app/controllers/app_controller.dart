@@ -29,7 +29,6 @@ import '../../../../database/database.dart';
 import '../../../../database/entity.dart';
 import '../../../../i18n/message.dart';
 import '../../../../main.dart';
-import '../../../../util/github_mirror.dart';
 import '../../../../util/locale_manager.dart';
 import '../../../../util/log_util.dart';
 import '../../../../util/package_info.dart';
@@ -55,10 +54,6 @@ const allTrackerSubscribeUrls = [
   'https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/best.txt',
   'https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/http.txt',
 ];
-final allTrackerSubscribeUrlCdns = {
-  for (var v in allTrackerSubscribeUrls) v: githubMirrorUrls(v, MirrorType.githubSource),
-};
-
 /// Represents a task that is pending URL update via listen mode.
 class PendingUpdateTask {
   final String id;
@@ -106,8 +101,6 @@ class AppController extends GetxController with WindowListener, TrayListener {
     _initRpcServer().onError((error, stackTrace) => logger.w("initRpcServer error", error, stackTrace));
 
     _initForegroundTask().onError((error, stackTrace) => logger.w("initForegroundTask error", error, stackTrace));
-
-    _initTrackerUpdate().onError((error, stackTrace) => logger.w("initTrackerUpdate error", error, stackTrace));
 
     _initLaunchAtStartup().onError((error, stackTrace) => logger.w("initLaunchAtStartup error", error, stackTrace));
 
@@ -489,65 +482,17 @@ class AppController extends GetxController with WindowListener, TrayListener {
   }
 
   Future<void> trackerUpdate() async {
-    final btExtConfig = downloaderConfig.value.extra.bt;
-    final result = <String>[];
-    for (var u in btExtConfig.trackerSubscribeUrls) {
-      final cdns = allTrackerSubscribeUrlCdns[u];
-      if (cdns == null) {
-        continue;
-      }
-      try {
-        final trackers = await Util.anyOk(cdns.map((cdn) => _fetchTrackers(cdn)));
-        result.addAll(trackers);
-      } catch (e) {
-        logger.w("subscribe trackers fail, url: $u", e);
-        return;
-      }
-    }
-    btExtConfig.subscribeTrackers.clear();
-    btExtConfig.subscribeTrackers.addAll(result);
+    // Persist the current subscription list first; the BT protocol owns
+    // fetching and validation. Trigger its cron job instead of downloading
+    // subscriptions in Flutter.
+    await saveConfig();
+    await triggerProtocolJob('bt', 'update-trackers');
+    downloaderConfig.value = await getConfig();
+    await _initDownloaderConfig();
     downloaderConfig.update((val) {
       val!.extra.bt.lastTrackerUpdateTime = DateTime.now();
     });
-    refreshTrackers();
-
     await saveConfig();
-  }
-
-  refreshTrackers() {
-    final btConfig = downloaderConfig.value.protocolConfig.bt;
-    final btExtConfig = downloaderConfig.value.extra.bt;
-    btConfig.trackers.clear();
-    btConfig.trackers.addAll(btExtConfig.subscribeTrackers);
-    btConfig.trackers.addAll(btExtConfig.customTrackers);
-    // remove duplicate
-    btConfig.trackers.toSet().toList();
-  }
-
-  Future<void> _initTrackerUpdate() async {
-    final btExtConfig = downloaderConfig.value.extra.bt;
-    final lastUpdateTime = btExtConfig.lastTrackerUpdateTime;
-    // if last update time is null or more than 1 day, update trackers
-    if (btExtConfig.autoUpdateTrackers &&
-        (lastUpdateTime == null || lastUpdateTime.difference(DateTime.now()).inDays < 0)) {
-      try {
-        await trackerUpdate();
-      } catch (e) {
-        logger.w("tracker update fail", e);
-      }
-    }
-  }
-
-  Future<List<String>> _fetchTrackers(String subscribeUrl) async {
-    final resp = await proxyRequest(subscribeUrl);
-    if (resp.statusCode != 200) {
-      throw Exception('Failed to get trackers, status code: ${resp.statusCode}');
-    }
-    if (resp.data == null || resp.data!.isEmpty) {
-      throw Exception('Failed to get trackers, data is null');
-    }
-    const ls = LineSplitter();
-    return ls.convert(resp.data!).where((e) => e.isNotEmpty).toList();
   }
 
   _initDownloaderConfig() async {
@@ -560,9 +505,22 @@ class AppController extends GetxController with WindowListener, TrayListener {
       final systemLocale = getLocaleKey(PlatformDispatcher.instance.locale);
       extra.locale = messages.keys.containsKey(systemLocale) ? systemLocale : getLocaleKey(fallbackLocale);
     }
-    if (extra.bt.trackerSubscribeUrls.isEmpty) {
-      // default select all tracker subscribe urls
-      extra.bt.trackerSubscribeUrls.addAll(allTrackerSubscribeUrls);
+    // Tracker settings live in protocolConfig.bt in the current backend.
+    // Migrate legacy extra.bt values once, then seed the defaults there.
+    final btConfig = config.protocolConfig.bt;
+    final legacyBt = extra.bt;
+    if (btConfig.trackerSubscribeUrls.isEmpty &&
+        legacyBt.trackerSubscribeUrls.isNotEmpty) {
+      btConfig.trackerSubscribeUrls =
+          List<String>.from(legacyBt.trackerSubscribeUrls);
+    }
+    if (btConfig.trackerSubscribeUrls.isEmpty) {
+      btConfig.trackerSubscribeUrls =
+          List<String>.from(allTrackerSubscribeUrls);
+    }
+    if (btConfig.customTrackers.isEmpty &&
+        legacyBt.customTrackers.isNotEmpty) {
+      btConfig.customTrackers = List<String>.from(legacyBt.customTrackers);
     }
 
     final proxy = config.proxy;

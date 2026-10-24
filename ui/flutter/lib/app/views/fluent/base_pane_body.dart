@@ -13,8 +13,8 @@ class BasePaneBody extends StatelessWidget {
     this.title,
     this.titleActions,
     ScrollController? scrollController,
-    final double spacing = 0,
-    final bool lazy = false,
+    double spacing = 0,
+    bool lazy = false,
     required List<Widget> children,
   }) : body = UniversalScrollView(controller: scrollController, spacing: spacing, lazy: lazy, children: children);
 

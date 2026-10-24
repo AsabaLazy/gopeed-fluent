@@ -62,14 +62,18 @@ class HttpConfig {
 @JsonSerializable()
 class BtConfig {
   int listenPort;
-  List<String> trackers;
+  List<String> trackerSubscribeUrls;
+  bool autoUpdateTrackers;
+  List<String> customTrackers;
   bool seedKeep;
   double seedRatio;
   int seedTime;
 
   BtConfig({
     this.listenPort = 0,
-    this.trackers = const [],
+    this.trackerSubscribeUrls = const [],
+    this.autoUpdateTrackers = true,
+    this.customTrackers = const [],
     this.seedKeep = false,
     this.seedRatio = 0,
     this.seedTime = 0,

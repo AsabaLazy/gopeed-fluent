@@ -65,8 +65,10 @@ class ExtensionController extends GetxController {
 
   final storeExtensions = <StoreExtension>[].obs;
   final storePagination = Rxn<StorePagination>();
+  final storeError = RxnString();
   final storeQuery = ''.obs;
   final storeSort = StoreExtensionSort.stars.obs;
+  int _storeRequestId = 0;
 
   final listFilter = ExtensionListFilter.market.obs;
 
@@ -117,7 +119,9 @@ class ExtensionController extends GetxController {
     try {
       installedExtensions.value = await getExtensions();
       if (refreshUpdates) {
-        await checkUpdate();
+        // Extension update checks are network-heavy and must not keep the
+        // installed list in its loading state.
+        unawaited(checkUpdate());
       }
     } catch (e) {
       logger.w("load installed extensions fail", e);
@@ -127,54 +131,100 @@ class ExtensionController extends GetxController {
   }
 
   Future<void> checkUpdate() async {
+    final extensions = installedExtensions.toList();
     final nextFlags = <String, String>{};
-    for (final ext in installedExtensions) {
-      try {
-        final resp = await upgradeCheckExtension(ext.identity);
-        if (resp.newVersion.isNotEmpty) {
-          nextFlags[ext.identity] = resp.newVersion;
+    if (extensions.isEmpty) {
+      updateFlags.assignAll(nextFlags);
+      return;
+    }
+
+    var nextIndex = 0;
+    Future<void> worker() async {
+      while (true) {
+        final index = nextIndex++;
+        if (index >= extensions.length) return;
+        final ext = extensions[index];
+        try {
+          final resp = await upgradeCheckExtension(ext.identity);
+          if (resp.newVersion.isNotEmpty) {
+            nextFlags[ext.identity] = resp.newVersion;
+          }
+        } catch (_) {
+          // Ignore single extension check failures to avoid breaking the list.
         }
-      } catch (_) {
-        // Ignore single extension check failures to avoid breaking the whole list.
       }
     }
+
+    final workerCount = extensions.length < 4 ? extensions.length : 4;
+    await Future.wait(List.generate(workerCount, (_) => worker()));
     updateFlags.assignAll(nextFlags);
   }
 
   Future<void> refreshStore() async {
+    final requestId = ++_storeRequestId;
+    final query = storeQuery.value;
+    final sort = storeSort.value;
     loadingStore.value = true;
+    storeError.value = null;
     try {
       final page = await GopeedSiteApi.instance.getExtensions(
         page: 1,
         limit: 20,
-        sort: storeSort.value,
-        query: storeQuery.value,
+        sort: sort,
+        query: query,
       );
+      if (requestId != _storeRequestId ||
+          query != storeQuery.value ||
+          sort != storeSort.value) {
+        return;
+      }
       storeExtensions.assignAll(page.data);
       storePagination.value = page.pagination;
     } catch (e) {
+      if (requestId == _storeRequestId) {
+        // Never mix results from a failed query with the previous query.
+        storeExtensions.clear();
+        storePagination.value = null;
+        storeError.value = e.toString();
+      }
       logger.w("refresh extension store fail", e);
     } finally {
-      loadingStore.value = false;
+      if (requestId == _storeRequestId) {
+        loadingStore.value = false;
+      }
     }
   }
 
   Future<void> loadMoreStore() async {
     final pagination = storePagination.value;
-    if (pagination == null || !pagination.hasNext || loadingMoreStore.value) {
+    if (pagination == null ||
+        !pagination.hasNext ||
+        loadingMoreStore.value ||
+        loadingStore.value) {
       return;
     }
+    final requestId = _storeRequestId;
+    final query = storeQuery.value;
+    final sort = storeSort.value;
     loadingMoreStore.value = true;
     try {
       final page = await GopeedSiteApi.instance.getExtensions(
         page: pagination.page + 1,
         limit: pagination.limit,
-        sort: storeSort.value,
-        query: storeQuery.value,
+        sort: sort,
+        query: query,
       );
+      if (requestId != _storeRequestId ||
+          query != storeQuery.value ||
+          sort != storeSort.value) {
+        return;
+      }
       storeExtensions.addAll(page.data);
       storePagination.value = page.pagination;
     } catch (e) {
+      if (requestId == _storeRequestId) {
+        storeError.value = e.toString();
+      }
       logger.w("load more extension store fail", e);
     } finally {
       loadingMoreStore.value = false;

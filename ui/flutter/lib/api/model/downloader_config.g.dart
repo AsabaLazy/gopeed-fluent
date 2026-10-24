@@ -67,7 +67,12 @@ Map<String, dynamic> _$HttpConfigToJson(HttpConfig instance) =>
 
 BtConfig _$BtConfigFromJson(Map<String, dynamic> json) => BtConfig(
       listenPort: (json['listenPort'] as num?)?.toInt() ?? 0,
-      trackers: (json['trackers'] as List<dynamic>?)
+      trackerSubscribeUrls: (json['trackerSubscribeUrls'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+      autoUpdateTrackers: json['autoUpdateTrackers'] as bool? ?? true,
+      customTrackers: (json['customTrackers'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           const [],
@@ -78,7 +83,9 @@ BtConfig _$BtConfigFromJson(Map<String, dynamic> json) => BtConfig(
 
 Map<String, dynamic> _$BtConfigToJson(BtConfig instance) => <String, dynamic>{
       'listenPort': instance.listenPort,
-      'trackers': instance.trackers,
+      'trackerSubscribeUrls': instance.trackerSubscribeUrls,
+      'autoUpdateTrackers': instance.autoUpdateTrackers,
+      'customTrackers': instance.customTrackers,
       'seedKeep': instance.seedKeep,
       'seedRatio': instance.seedRatio,
       'seedTime': instance.seedTime,

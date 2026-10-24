@@ -15,8 +15,8 @@ import '../../../../database/database.dart';
 import '../../../../util/util.dart';
 import '../controllers/extension_controller.dart';
 
-class ExtensionCard extends StatelessWidget {
-  ExtensionCard({
+class ExtensionCard extends StatefulWidget {
+  const ExtensionCard({
     super.key,
     required this.item,
     required this.busy,
@@ -39,13 +39,33 @@ class ExtensionCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onInstall;
 
+  @override
+  State<ExtensionCard> createState() => _ExtensionCardState();
+}
+
+class _ExtensionCardState extends State<ExtensionCard> {
   final menuController = FlyoutController();
+
+  @override
+  void dispose() {
+    menuController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     final subTitleStyle = theme.typography.caption;
 
+    final item = widget.item;
+    final busy = widget.busy;
+    final canUpdate = widget.canUpdate;
+    final onTap = widget.onTap;
+    final onToggle = widget.onToggle;
+    final onOpenSetting = widget.onOpenSetting;
+    final onUpdate = widget.onUpdate;
+    final onDelete = widget.onDelete;
+    final onInstall = widget.onInstall;
     final installed = item.installed;
     final store = item.store;
     final installedFlag = item.isInstalled;
@@ -91,7 +111,7 @@ class ExtensionCard extends StatelessWidget {
               checked: !installed.disabled,
               leadingContent: true,
               content: Text(installed.disabled ? 'disable'.tr : 'enable'.tr),
-              onChanged: busy || onToggle == null ? null : (value) async => await onToggle!(value),
+              onChanged: busy || onToggle == null ? null : (value) async => await onToggle(value),
             ),
           if (!installedFlag && store != null)
             Tooltip(
@@ -129,7 +149,7 @@ class ExtensionCard extends StatelessWidget {
                                 ? null
                                 : () {
                                     if (ctx.mounted) Flyout.of(ctx).close();
-                                    onUpdate?.call();
+                                    onUpdate();
                                   },
                           ),
                           const MenuFlyoutSeparator(),

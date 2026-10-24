@@ -27,13 +27,23 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Keep the native window rectangular. The compositor/GTK theme must not
-  // round the surface: the Flutter content now fills the full frame.
+  // Keep the native window rectangular. GTK's CSD theme puts the rounding,
+  // shadow and transparent margin on the "decoration" node, so the override
+  // must be scoped to this window.
+  gtk_style_context_add_class(
+      gtk_widget_get_style_context(GTK_WIDGET(window)), "gopeed-window");
   GdkScreen* window_screen = gtk_window_get_screen(window);
   g_autoptr(GtkCssProvider) window_css = gtk_css_provider_new();
   gtk_css_provider_load_from_data(
       window_css,
-      "window, .background { border-radius: 0; box-shadow: none; }",
+      "window.gopeed-window, window.gopeed-window.background {"
+      "  border-radius: 0;"
+      "}"
+      "window.gopeed-window decoration {"
+      "  border-radius: 0;"
+      "  box-shadow: none;"
+      "  margin: 0;"
+      "}",
       -1, nullptr);
   gtk_style_context_add_provider_for_screen(
       window_screen, GTK_STYLE_PROVIDER(window_css),
@@ -62,9 +72,14 @@ static void my_application_activate(GApplication* application) {
     gtk_header_bar_set_title(header_bar, "gopeed");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
+    gtk_widget_hide(GTK_WIDGET(header_bar));
   } else {
     gtk_window_set_title(window, "gopeed");
   }
+
+  // The Flutter title bar provides dragging and the Flutter edge zones provide
+  // resizing. A frameless window avoids GTK's rounded CSD decoration entirely.
+  gtk_window_set_decorated(window, FALSE);
 
   gtk_window_set_default_size(window, 1280, 720);
   gtk_widget_show(GTK_WIDGET(window));
