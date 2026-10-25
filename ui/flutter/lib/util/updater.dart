@@ -9,7 +9,7 @@ import '../api/api.dart';
 import 'log_util.dart';
 import 'package_info.dart';
 
-const modRespository = 'https://github.com/Minessential/gopeed-fluent';
+const modRespository = 'https://github.com/AsabaLazy/gopeed-fluent';
 
 class VersionInfo {
   final String version;
@@ -38,7 +38,7 @@ Future<VersionInfo?> checkUpdate() async {
   String? releaseDataStr;
   try {
     releaseDataStr = (await proxyRequest(
-      "https://api.github.com/repos/Minessential/gopeed-fluent/releases/latest",
+      "https://api.github.com/repos/AsabaLazy/gopeed-fluent/releases/latest",
     )).data;
   } catch (e) {
     logger.e("Failed to fetch latest release data", e);

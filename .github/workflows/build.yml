@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.1.2)"
+        description: "Release version (e.g. 1.1.3)"
         required: false
-        default: "1.1.2"
+        default: "1.1.3"
         type: string
       publish_release:
         description: "Publish to GitHub Releases"
